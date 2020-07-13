@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -13,6 +14,7 @@
 #include <sys/select.h>
 #include <syslog.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <pwd.h>
 #include <grp.h>
 #include <pthread.h>
@@ -24,19 +26,43 @@
 
 #define GRAPHEQD_VERSION "1"
 
+#define SAMPLING_RATE 44100 // Hz
+#define SAMPLING_CHANNELS 2 // stereo
+#define SAMPLING_WIDTH 2    // 16 bit signed per channel per sample
+#define SAMPLING_FORMAT SND_PCM_FORMAT_S16 // keep in sync to SAMPLING_WIDTH
+#define FFT_SIZE 2048
+
 #define log_error(fmt, params ...) do { \
   if (foreground) warnx(fmt "\n", ## params); \
   syslog(LOG_ERR, "%s (%s:%i): " fmt "\n", \
          __FUNCTION__, __FILE__, __LINE__, ## params); \
 } while (0)
 
+/* integer to string by preprocessor */
+#define XSTR(a) #a
+#define STR(a) XSTR(a)
+
+/* passed to a client worker thread after accept() */
 struct client_worker_arg {
   struct sockaddr addr;
   socklen_t addr_len;
+  char clientname[INET6_ADDRSTRLEN + 8];
   int socket;
 };
 
-int running = 1, foreground = 0;
+/* used by pcm & fft worker threads */
+int pcm_buf_idx = 0;
+int16_t pcm_buf[2][FFT_SIZE];
+/* used by fft & every client worker thread */
+int display_idx = 0;
+char display_buf[2][27];
+/* used by pcm & every client worker thread */
+int num_clients = 0;
+
+/* used by main() and sigterm_handler() */
+int running = 1;
+/* used by main() and log_error() macro */
+int foreground = 0;
 
 static void sigterm_handler (int sig __attribute__((unused)))
 {
@@ -195,21 +221,24 @@ static snd_pcm_t *open_alsa (char *soundcard)
     errx(1, "%s: %s", "snd_pcm_hw_params_set_access(INTERLEAVED)",
                       snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S16);
+  err = snd_pcm_hw_params_set_format(handle, params, SAMPLING_FORMAT);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_format(S16)", snd_strerror(err));
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_format("
+                      STR(SAMPLING_WIDTH*2) ")", snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_channels(handle, params, 2);
+  err = snd_pcm_hw_params_set_channels(handle, params, SAMPLING_CHANNELS);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_channels(2)", snd_strerror(err));
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_channels("
+                      STR(SAMPLING_CHANNELS) ")", snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_rate(handle, params, 44100, 0);
+  err = snd_pcm_hw_params_set_rate(handle, params, SAMPLING_RATE, 0);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_rate(44100)", snd_strerror(err));
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_rate(" STR(SAMPLING_RATE) ")",
+                      snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_period_size(handle, params, 2048, 0);
+  err = snd_pcm_hw_params_set_period_size(handle, params, FFT_SIZE, 0);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_period_size(2048)",
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) ")",
                       snd_strerror(err));
 
   err = snd_pcm_hw_params(handle, params);
@@ -221,7 +250,7 @@ static snd_pcm_t *open_alsa (char *soundcard)
   return handle;
 }
 
-int wait_for_client (int listen_socket)
+static int wait_for_client (int listen_socket)
 {
   int res;
   fd_set rfds;
@@ -242,34 +271,89 @@ int wait_for_client (int listen_socket)
   return res;
 }
 
-int create_client_worker (int listen_socket)
+static void client_address (struct client_worker_arg *arg)
+{
+  char addr[INET6_ADDRSTRLEN];
+  struct sockaddr_in *sin;
+  struct sockaddr_in6 *sin6;
+
+  switch (arg->addr.sa_family) {
+    case AF_INET:
+      sin = (struct sockaddr_in*) &arg->addr;
+      snprintf(arg->clientname, sizeof(arg->clientname), "%s:%u",
+               inet_ntop(sin->sin_family, &sin->sin_addr, addr, sizeof(addr)),
+               htons(sin->sin_port));
+      break;
+    case AF_INET6:
+      sin6 = (struct sockaddr_in6*) &arg->addr;
+      snprintf(arg->clientname, sizeof(arg->clientname), "[%s]:%u",
+               inet_ntop(sin6->sin6_family, &sin6->sin6_addr, addr,
+                         sizeof(addr)),
+               htons(sin6->sin6_port));
+      break;
+    default:
+      snprintf(arg->clientname, sizeof(arg->clientname),
+               "<unknown address family %u>", arg->addr.sa_family);
+      break;
+  }
+}
+
+static void * client_worker (void *arg0)
+{
+  struct client_worker_arg *arg = arg0;
+
+  pthread_setname_np(pthread_self(), "grapheqd:client");
+  client_address(arg);
+
+  return NULL;
+}
+
+static int create_client_worker (int listen_socket)
 {
   pthread_t thread;
-  struct client_worker_arg *arg0;
+  struct client_worker_arg *arg;
   int res;
-void *worker;
 
-  arg0 = malloc(sizeof(*arg0));
-  if (arg0 == NULL) {
+  arg = malloc(sizeof(*arg));
+  if (arg == NULL) {
     log_error("malloc(): out of memory");
     return ENOMEM;
   }
 
   do {
-    arg0->addr_len = sizeof(arg0->addr);
-    arg0->socket = accept(listen_socket, &arg0->addr, &arg0->addr_len);
-  } while ((arg0->socket < 0) && (errno == EINTR));
+    arg->addr_len = sizeof(arg->addr);
+    arg->socket = accept(listen_socket, &arg->addr, &arg->addr_len);
+  } while ((arg->socket < 0) && (errno == EINTR));
 
-  if (arg0->socket < 0) {
+  if (arg->socket < 0) {
     log_error("accept(): %s", strerror(errno));
-    return errno;
+    free(arg);
+    return 0;
   }
 
-  res = pthread_create(&thread, NULL, worker, arg0);
+  res = pthread_create(&thread, NULL, &client_worker, arg);
   if (res != 0)
-    log_error("pthread_create(): %s", strerror(res));
+    log_error("cannot create client worker thread: %s", strerror(res));
 
   return res;
+}
+
+static void * pcm_worker (void *arg0)
+{
+  snd_pcm_t *soundhandle = (snd_pcm_t*) arg0;
+
+  pthread_setname_np(pthread_self(), "grapheqd:pcm");
+
+  return NULL;
+}
+
+static void * fft_worker (void *arg0)
+{
+  kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
+
+  pthread_setname_np(pthread_self(), "grapheqd:fft");
+
+  return NULL;
 }
 
 static void show_help ()
@@ -301,6 +385,8 @@ int main (int argc, char **argv)
        *soundcard = "hw:0";
   struct passwd *user = NULL;
   snd_pcm_t *soundhandle;
+  kiss_fft_cfg fft_cfg;
+  pthread_t thread;
 
   while ((res = getopt(argc, argv, "a:dhl:p:s:u:")) != -1) {
     switch (res) {
@@ -317,13 +403,30 @@ int main (int argc, char **argv)
 
   listen_socket = create_listen_socket_inet(address, port);
   soundhandle = open_alsa(soundcard);
+
   if (!foreground)
     daemonize();
+
   if (pidfile)
     save_pidfile(pidfile);
+
   if (user)
     change_user(user);
+
+  fft_cfg = kiss_fft_alloc(FFT_SIZE, 0, NULL, NULL);
+  if (!fft_cfg)
+    errx(1, "cannot initialize FFT state");
+
+  res = pthread_create(&thread, NULL, &pcm_worker, soundhandle);
+  if (res != 0)
+    errx(1, "cannot create pcm worker thread: %s", strerror(res));
+
+  res = pthread_create(&thread, NULL, &fft_worker, fft_cfg);
+  if (res != 0)
+    errx(1, "cannot create fft worker thread: %s", strerror(res));
+
   setup_signals();
+
   if (!foreground) {
     close(0); close(1); close(2);
   }
