@@ -40,6 +40,11 @@
          __FUNCTION__, __FILE__, __LINE__, ## params); \
 } while (0)
 
+#define log_info(fmt, params ...) do { \
+  if (foreground) printf(fmt "\n", ## params); \
+  syslog(LOG_INFO, fmt "\n", ## params); \
+} while (0)
+
 /* integer to string by preprocessor */
 #define XSTR(a) #a
 #define STR(a) XSTR(a)
@@ -71,7 +76,7 @@ static int foreground = 0;
 
 static void sigterm_handler (int sig __attribute__((unused)))
 {
-  syslog(LOG_INFO, "SIGTERM received, going down...\n");
+  log_info("SIGTERM received, going down...");
   running = 0;
 }
 
@@ -315,7 +320,7 @@ char buf[1024];
   ++num_clients;
 
   while ((res = read(arg->socket, buf, 1024)) > 0) {
-    if (!strncmp(buf, "switch", 1024)) {
+    if (!strncmp(buf, "switch", 5)) {
       for (res = 0; res == 0;) {
         res = pthread_cond_signal(&pcm_cond);
         if (res) {
@@ -533,8 +538,8 @@ static void * fft_worker (void *arg0)
 
     // TODO: fill display per band
     for (res = 0; res < DISPLAY_BANDS; res++) {
-      display_buf[display_buf_idx][0][res] = 23;
-      display_buf[display_buf_idx][1][res] = 42;
+      display_buf[display_buf_idx][0][res] = 65;
+      display_buf[display_buf_idx][1][res] = 75;
     }
 
     display_buf_idx = 1 - display_buf_idx;
@@ -625,7 +630,7 @@ int main (int argc, char **argv)
     errx(1, "cannot initialize FFT state");
 
   create_helper_worker(&pcm_worker, soundhandle, "pcm");
-  create_helper_worker(&fft_worker, soundhandle, "fft");
+  create_helper_worker(&fft_worker, fft_cfg, "fft");
 
   setup_signals();
 
@@ -634,7 +639,7 @@ int main (int argc, char **argv)
   }
 
   openlog("grapheqd", LOG_NDELAY|LOG_PID, LOG_DAEMON);
-  syslog(LOG_INFO, "starting...\n");
+  log_info("starting...");
 
 #ifdef USE_SYSTEMD
   sd_notify(0, "READY=1");
@@ -653,7 +658,7 @@ int main (int argc, char **argv)
   if (pidfile)
     unlink(pidfile); /* may fail, e.g. due to changed user privs */
 
-  syslog(LOG_INFO, "exiting...\n");
+  log_info("exiting...");
   closelog();
 
   return 0;
