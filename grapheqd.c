@@ -6,10 +6,16 @@
 #include <netdb.h>
 #include <errno.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #include <sys/select.h>
 #include <syslog.h>
 #include <sys/socket.h>
+#include <pwd.h>
 #include <pthread.h>
+#include "kiss_fft.h"
 
 #define GRAPHEQD_VERSION "1"
 
@@ -47,6 +53,16 @@ static void setup_signals ()
   setup_signal(SIGTERM, sigterm_handler);
 }
 
+static struct passwd *get_user (char *username)
+{
+  struct passwd *pw = getpwnam(username);
+
+  if (!pw)
+    errx(1, "no such user: %s", username);
+
+  return pw;
+}
+
 static int create_listen_socket_inet (char *ip, char *port)
 {
   int listen_socket, yes, res;
@@ -77,17 +93,63 @@ static int create_listen_socket_inet (char *ip, char *port)
   yes = 1;
   res = setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
   if (res != 0)
-    err(1, "setsockopt()");
+    err(1, "setsockopt(REUSEPORT)");
 
   yes = 1;
   res = setsockopt(listen_socket, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
   if (res != 0)
-    err(1, "setsockopt()");
+    err(1, "setsockopt(KEEPALIVE)");
 
   if (listen(listen_socket, 0) != 0)
     err(1, "listen()");
 
   return listen_socket;
+}
+
+static void daemonize ()
+{
+  pid_t pid;
+
+  if ((pid = fork()) < 0)
+    err(1, "fork()");
+
+  if (pid > 0)
+    exit(0);
+
+  if (setsid() == -1)
+    err(1, "setsid()");
+
+  if (chdir("/"))
+    err(1, "chdir(/)");
+}
+
+static void save_pidfile (char *pidfile)
+{
+  int fd, len;
+  char pid[16];
+
+  fd = open(pidfile, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+  if (fd < 0)
+    err(1, "cannot open %s for writing", pidfile);
+
+  if (flock(fd, LOCK_EX | LOCK_NB))
+    errx(1, "cannot lock %s (grapheqd still running?)", pidfile);
+
+  len = snprintf(pid, sizeof(pid), "%u\n", getpid());
+
+  if (write(fd, pid, len) != len)
+    errx(1, "cannot write %s", pidfile);
+
+  if (close(fd))
+    errx(1, "cannot close %s", pidfile);
+}
+
+static void drop_user (uid_t uid, gid_t gid)
+{
+  if (setgid(gid))
+    err(1, "setgid()");
+  if (setuid(uid))
+    err(1, "setuid()");
 }
 
 static void show_help ()
@@ -114,9 +176,10 @@ static void show_help ()
 
 int main (int argc, char **argv)
 {
-  int res, foreground = 0;
+  int res, foreground = 0, listen_socket;
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL,
-       *soundcard = "hw:0", *user = "nobody";
+       *soundcard = "hw:0";
+  struct passwd *user = NULL;
 
   while ((res = getopt(argc, argv, "a:dhl:p:s:u:")) != -1) {
     switch (res) {
@@ -126,11 +189,25 @@ int main (int argc, char **argv)
       case 'l': port = optarg; break;
       case 'p': pidfile = optarg; break;
       case 's': soundcard = optarg; break;
-      case 'u': user = optarg; break;
+      case 'u': user = get_user(optarg); break;
       default: errx(1, "Unknown option '%i'. See -h for help.", res);
     }
   }
 
+  listen_socket = create_listen_socket_inet(address, port);
+  // open alsa
+  if (!foreground)
+    daemonize();
+  if (pidfile)
+    save_pidfile(pidfile);
+  if (user)
+    drop_user(user->pw_uid, user->pw_gid);
+  setup_signals();
+  // accept loop
+
+
+  if (pidfile)
+    unlink(pidfile);
 
   return 0;
 }
