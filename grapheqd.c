@@ -14,13 +14,29 @@
 #include <syslog.h>
 #include <sys/socket.h>
 #include <pwd.h>
+#include <grp.h>
 #include <pthread.h>
 #include <alsa/asoundlib.h>
 #include "kiss_fft.h"
+#ifdef USE_SYSTEMD
+#  include <systemd/sd-daemon.h>
+#endif
 
 #define GRAPHEQD_VERSION "1"
 
-int running = 1;
+#define log_error(fmt, params ...) do { \
+  if (foreground) warnx(fmt "\n", ## params); \
+  syslog(LOG_ERR, "%s (%s:%i): " fmt "\n", \
+         __FUNCTION__, __FILE__, __LINE__, ## params); \
+} while (0)
+
+struct client_worker_arg {
+  struct sockaddr addr;
+  socklen_t addr_len;
+  int socket;
+};
+
+int running = 1, foreground = 0;
 
 static void sigterm_handler (int sig __attribute__((unused)))
 {
@@ -147,7 +163,7 @@ static void save_pidfile (char *pidfile)
 
 static void change_user (struct passwd *pw)
 {
-  if (initgroups(pw->pw_nam, pw->pw_gid))
+  if (initgroups(pw->pw_name, pw->pw_gid))
     err(1, "initgroups()");
   if (setgid(pw->pw_gid))
     err(1, "setgid()");
@@ -158,36 +174,102 @@ static void change_user (struct passwd *pw)
 static snd_pcm_t *open_alsa (char *soundcard)
 {
   snd_pcm_t *handle;
-  snd_pcm_hw_params_t params;
+  snd_pcm_hw_params_t *params;
   int err;
 
   err = snd_pcm_open(&handle, soundcard, SND_PCM_STREAM_CAPTURE, 0);
   if (err)
     errx(1, "cannot open %s for capturing: %s", soundcard, snd_strerror(err));
 
-  err = snd_pcm_hw_params_any(handle, &params);
+  err = snd_pcm_hw_params_malloc(&params);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_alloca()", snd_strerror(err));
+
+  err = snd_pcm_hw_params_any(handle, params);
   if (err)
     errx(1, "%s: %s", "snd_pcm_hw_params_any()", snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_format(handle, &params, SND_PCM_FORMAT_S16);
+  err = snd_pcm_hw_params_set_access(handle, params,
+                                     SND_PCM_ACCESS_RW_INTERLEAVED);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_access(INTERLEAVED)",
+                      snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S16);
   if (err)
     errx(1, "%s: %s", "snd_pcm_hw_params_set_format(S16)", snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_channels(handle, &params, 2);
+  err = snd_pcm_hw_params_set_channels(handle, params, 2);
   if (err)
     errx(1, "%s: %s", "snd_pcm_hw_params_set_channels(2)", snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_access(handle, &params,
-                                     SND_PCM_ACCESS_RW_NONINTERLEAVED);
+  err = snd_pcm_hw_params_set_rate(handle, params, 44100, 0);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_access(NONINTERLEAVED)",
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_rate(44100)", snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_period_size(handle, params, 2048, 0);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_period_size(2048)",
                       snd_strerror(err));
 
-  err = snd_pcm_hw_params(handle, &params);
+  err = snd_pcm_hw_params(handle, params);
   if (err)
     errx(1, "%s: %s", "snd_pcm_hw_params()", snd_strerror(err));
 
+  snd_pcm_hw_params_free(params);
+
   return handle;
+}
+
+int wait_for_client (int listen_socket)
+{
+  int res;
+  fd_set rfds;
+
+  FD_ZERO(&rfds);
+  FD_SET(listen_socket, &rfds);
+
+  res = select(listen_socket + 1, &rfds, NULL, NULL, NULL);
+
+  if (res < 0) {
+    if (errno == EINTR) {
+      res = 0;
+    } else {
+      log_error("select(): %s", strerror(errno));
+    }
+  }
+
+  return res;
+}
+
+int create_client_worker (int listen_socket)
+{
+  pthread_t thread;
+  struct client_worker_arg *arg0;
+  int res;
+void *worker;
+
+  arg0 = malloc(sizeof(*arg0));
+  if (arg0 == NULL) {
+    log_error("malloc(): out of memory");
+    return ENOMEM;
+  }
+
+  do {
+    arg0->addr_len = sizeof(arg0->addr);
+    arg0->socket = accept(listen_socket, &arg0->addr, &arg0->addr_len);
+  } while ((arg0->socket < 0) && (errno == EINTR));
+
+  if (arg0->socket < 0) {
+    log_error("accept(): %s", strerror(errno));
+    return errno;
+  }
+
+  res = pthread_create(&thread, NULL, worker, arg0);
+  if (res != 0)
+    log_error("pthread_create(): %s", strerror(res));
+
+  return res;
 }
 
 static void show_help ()
@@ -214,11 +296,11 @@ static void show_help ()
 
 int main (int argc, char **argv)
 {
-  int res, foreground = 0, listen_socket;
+  int res, listen_socket;
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL,
        *soundcard = "hw:0";
   struct passwd *user = NULL;
-  snd_pcm_t *sndcard;
+  snd_pcm_t *soundhandle;
 
   while ((res = getopt(argc, argv, "a:dhl:p:s:u:")) != -1) {
     switch (res) {
@@ -246,14 +328,38 @@ int main (int argc, char **argv)
     close(0); close(1); close(2);
   }
 
-//  while (running) {
-  // accept loop
-//  }
+  openlog("grapheqd", LOG_NDELAY|LOG_PID, LOG_DAEMON);
+  syslog(LOG_INFO, "starting...\n");
 
-  /* both may fail, e.g. due to changed user privs */
+#ifdef USE_SYSTEMD
+  sd_notify(0, "READY=1");
+#endif
+
+  while (running) {
+    res = wait_for_client(listen_socket);
+
+    if (res < 0)
+      running = 0;
+    if (res > 0)
+      if (create_client_worker(listen_socket))
+        running = 0;
+/*
+{
+puts("moof");
+int16_t buf[2*2048];
+snd_pcm_sframes_t n=snd_pcm_readi(soundhandle, (void*) buf , 2048);
+printf("read %li frames\n", n);
+if (n<0) puts(snd_strerror(n));
+}
+*/
+  }
+
   snd_pcm_close(soundhandle);
   if (pidfile)
-    unlink(pidfile);
+    unlink(pidfile); /* may fail, e.g. due to changed user privs */
+
+  syslog(LOG_INFO, "exiting...\n");
+  closelog();
 
   return 0;
 }
