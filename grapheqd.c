@@ -29,7 +29,9 @@
 #define SAMPLING_RATE 44100 // Hz
 #define SAMPLING_CHANNELS 2 // stereo
 #define SAMPLING_WIDTH 2    // 16 bit signed per channel per sample
-#define SAMPLING_FORMAT SND_PCM_FORMAT_S16 // keep in sync to SAMPLING_WIDTH
+#define SAMPLING_FORMAT SND_PCM_FORMAT_S16 /* keep in sync to SAMPLING_WIDTH
+                                              and every use of int16_t */
+#define DISPLAY_BANDS 27
 #define FFT_SIZE 2048
 
 #define log_error(fmt, params ...) do { \
@@ -50,19 +52,22 @@ struct client_worker_arg {
   int socket;
 };
 
-/* used by pcm & fft worker threads */
-int pcm_buf_idx = 0;
-int16_t pcm_buf[2][FFT_SIZE];
-/* used by fft & every client worker thread */
-int display_idx = 0;
-char display_buf[2][27];
-/* used by pcm & every client worker thread */
-int num_clients = 0;
+static int pcm_buf_idx = 0;
+static int16_t pcm_buf[2][FFT_SIZE * SAMPLING_CHANNELS];
+static pthread_mutex_t pcm_mtx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t pcm_cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t fft_mtx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t fft_cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t display_mtx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t display_cond = PTHREAD_COND_INITIALIZER;
+static int display_buf_idx = 0;
+static char display_buf[2][SAMPLING_CHANNELS][DISPLAY_BANDS];
+static int num_clients = 0;
 
 /* used by main() and sigterm_handler() */
-int running = 1;
+static int running = 1;
 /* used by main() and log_error() macro */
-int foreground = 0;
+static int foreground = 0;
 
 static void sigterm_handler (int sig __attribute__((unused)))
 {
@@ -301,9 +306,109 @@ static void client_address (struct client_worker_arg *arg)
 static void * client_worker (void *arg0)
 {
   struct client_worker_arg *arg = arg0;
+  int res;
+  int new_display_buf_idx;
+char buf[1024];
 
   pthread_setname_np(pthread_self(), "grapheqd:client");
   client_address(arg);
+  ++num_clients;
+
+  while ((res = read(arg->socket, buf, 1024)) > 0) {
+    if (!strncmp(buf, "switch", 1024)) {
+      for (res = 0; res == 0;) {
+        res = pthread_cond_signal(&pcm_cond);
+        if (res) {
+          log_error("cannot signal pcm condition: %s", strerror(res));
+          continue;
+        }
+// TODO: increase mutex
+        res = pthread_mutex_lock(&display_mtx);
+        if (res) {
+          log_error("cannot lock display mutex: %s", strerror(res));
+          continue;
+        }
+
+        res = pthread_cond_wait(&display_cond, &display_mtx);
+        if (res) {
+          log_error("cannot wait for display condition: %s", strerror(res));
+          continue;
+        }
+
+        res = pthread_mutex_unlock(&display_mtx);
+        if (res) {
+          log_error("cannot unlock display mutex: %s", strerror(res));
+          continue;
+        }
+
+        new_display_buf_idx = display_buf_idx;
+        new_display_buf_idx = 1 - new_display_buf_idx;
+snprintf(buf, 1024,
+"Left:\n"
+"%c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c\n"
+"Right:\n"
+"%c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c\n",
+display_buf[new_display_buf_idx][0][0],
+display_buf[new_display_buf_idx][0][1],
+display_buf[new_display_buf_idx][0][2],
+display_buf[new_display_buf_idx][0][3],
+display_buf[new_display_buf_idx][0][4],
+display_buf[new_display_buf_idx][0][5],
+display_buf[new_display_buf_idx][0][6],
+display_buf[new_display_buf_idx][0][7],
+display_buf[new_display_buf_idx][0][8],
+display_buf[new_display_buf_idx][0][9],
+display_buf[new_display_buf_idx][0][10],
+display_buf[new_display_buf_idx][0][11],
+display_buf[new_display_buf_idx][0][12],
+display_buf[new_display_buf_idx][0][13],
+display_buf[new_display_buf_idx][0][14],
+display_buf[new_display_buf_idx][0][15],
+display_buf[new_display_buf_idx][0][16],
+display_buf[new_display_buf_idx][0][17],
+display_buf[new_display_buf_idx][0][18],
+display_buf[new_display_buf_idx][0][19],
+display_buf[new_display_buf_idx][0][20],
+display_buf[new_display_buf_idx][0][21],
+display_buf[new_display_buf_idx][0][22],
+display_buf[new_display_buf_idx][0][23],
+display_buf[new_display_buf_idx][0][24],
+display_buf[new_display_buf_idx][0][25],
+display_buf[new_display_buf_idx][0][26],
+display_buf[new_display_buf_idx][1][0],
+display_buf[new_display_buf_idx][1][1],
+display_buf[new_display_buf_idx][1][2],
+display_buf[new_display_buf_idx][1][3],
+display_buf[new_display_buf_idx][1][4],
+display_buf[new_display_buf_idx][1][5],
+display_buf[new_display_buf_idx][1][6],
+display_buf[new_display_buf_idx][1][7],
+display_buf[new_display_buf_idx][1][8],
+display_buf[new_display_buf_idx][1][9],
+display_buf[new_display_buf_idx][1][10],
+display_buf[new_display_buf_idx][1][11],
+display_buf[new_display_buf_idx][1][12],
+display_buf[new_display_buf_idx][1][13],
+display_buf[new_display_buf_idx][1][14],
+display_buf[new_display_buf_idx][1][15],
+display_buf[new_display_buf_idx][1][16],
+display_buf[new_display_buf_idx][1][17],
+display_buf[new_display_buf_idx][1][18],
+display_buf[new_display_buf_idx][1][19],
+display_buf[new_display_buf_idx][1][20],
+display_buf[new_display_buf_idx][1][21],
+display_buf[new_display_buf_idx][1][22],
+display_buf[new_display_buf_idx][1][23],
+display_buf[new_display_buf_idx][1][24],
+display_buf[new_display_buf_idx][1][25],
+display_buf[new_display_buf_idx][1][26]);
+write(arg->socket, buf, strlen(buf));
+      }
+if (res) break;
+    }
+  }
+
+  --num_clients;
 
   return NULL;
 }
@@ -341,8 +446,50 @@ static int create_client_worker (int listen_socket)
 static void * pcm_worker (void *arg0)
 {
   snd_pcm_t *soundhandle = (snd_pcm_t*) arg0;
+  int res;
+  snd_pcm_sframes_t num_frames;
 
   pthread_setname_np(pthread_self(), "grapheqd:pcm");
+
+  res = pthread_mutex_lock(&pcm_mtx);
+  if (res) {
+    log_error("cannot lock pcm mutex: %s", strerror(res));
+    return NULL;
+  }
+
+  while (running) {
+    res = pthread_cond_wait(&pcm_cond, &pcm_mtx);
+    if (res) {
+      log_error("cannot wait for pcm condition: %s", strerror(res));
+      break;
+    }
+
+    while (num_clients > 0) {
+      num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_buf_idx],
+                                 FFT_SIZE);
+      if (num_frames < 0) {
+        log_error("cannot read pcm data: %s", snd_strerror(num_frames));
+        goto ERROR;
+      }
+      if (num_frames != FFT_SIZE) {
+        log_error("read %li bytes of pcm data instead of %i", num_frames,
+                  FFT_SIZE);
+      }
+
+      pcm_buf_idx = 1 - pcm_buf_idx;
+
+      res = pthread_cond_signal(&fft_cond);
+      if (res) {
+        log_error("cannot signal fft condition: %s", strerror(res));
+        goto ERROR;
+      }
+    }
+  }
+
+ERROR:
+  res = pthread_mutex_unlock(&pcm_mtx);
+  if (res)
+    log_error("cannot unlock pcm mutex: %s", strerror(res));
 
   return NULL;
 }
@@ -350,10 +497,71 @@ static void * pcm_worker (void *arg0)
 static void * fft_worker (void *arg0)
 {
   kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
+  int res, new_pcm_buf_idx;
+  kiss_fft_cpx lin[FFT_SIZE], rin[FFT_SIZE];
+  kiss_fft_cpx lout[FFT_SIZE], rout[FFT_SIZE];
 
   pthread_setname_np(pthread_self(), "grapheqd:fft");
 
+  res = pthread_mutex_lock(&fft_mtx);
+  if (res) {
+    log_error("cannot lock fft mutex: %s", strerror(res));
+    return NULL;
+  }
+
+  while (running) {
+    res = pthread_cond_wait(&fft_cond, &fft_mtx);
+    if (res) {
+      log_error("cannot wait for fft condition: %s", strerror(res));
+      break;
+    }
+
+    new_pcm_buf_idx = pcm_buf_idx;
+    new_pcm_buf_idx = 1 - new_pcm_buf_idx;
+
+    for (res = 0; res < FFT_SIZE; res++) {
+      /* left channel */
+      lin[res].r = pcm_buf[new_pcm_buf_idx][2 * res];
+      lin[res].i = 0;
+      /* right channel */
+      rin[res].r = pcm_buf[new_pcm_buf_idx][2 * res + 1];
+      rin[res].i = 0;
+    }
+
+    kiss_fft(fft_cfg, &lin[0], &lout[0]);
+    kiss_fft(fft_cfg, &rin[0], &rout[0]);
+
+    // TODO: fill display per band
+    for (res = 0; res < DISPLAY_BANDS; res++) {
+      display_buf[display_buf_idx][0][res] = 23;
+      display_buf[display_buf_idx][1][res] = 42;
+    }
+
+    display_buf_idx = 1 - display_buf_idx;
+
+    res = pthread_cond_broadcast(&display_cond);
+    if (res) {
+      log_error("cannot signal display condition: %s", strerror(res));
+      break;
+    }
+  }
+
+  res = pthread_mutex_unlock(&fft_mtx);
+  if (res)
+    log_error("cannot unlock fft mutex: %s", strerror(res));
+
   return NULL;
+}
+
+static void create_helper_worker (void * (*start_routine)(void*), void *arg,
+                                  char *name)
+{
+  int res;
+  pthread_t thread;
+
+  res = pthread_create(&thread, NULL, start_routine, arg);
+  if (res != 0)
+    errx(1, "cannot create %s worker thread: %s", name, strerror(res));
 }
 
 static void show_help ()
@@ -386,7 +594,6 @@ int main (int argc, char **argv)
   struct passwd *user = NULL;
   snd_pcm_t *soundhandle;
   kiss_fft_cfg fft_cfg;
-  pthread_t thread;
 
   while ((res = getopt(argc, argv, "a:dhl:p:s:u:")) != -1) {
     switch (res) {
@@ -417,13 +624,8 @@ int main (int argc, char **argv)
   if (!fft_cfg)
     errx(1, "cannot initialize FFT state");
 
-  res = pthread_create(&thread, NULL, &pcm_worker, soundhandle);
-  if (res != 0)
-    errx(1, "cannot create pcm worker thread: %s", strerror(res));
-
-  res = pthread_create(&thread, NULL, &fft_worker, fft_cfg);
-  if (res != 0)
-    errx(1, "cannot create fft worker thread: %s", strerror(res));
+  create_helper_worker(&pcm_worker, soundhandle, "pcm");
+  create_helper_worker(&fft_worker, soundhandle, "fft");
 
   setup_signals();
 
@@ -440,21 +642,11 @@ int main (int argc, char **argv)
 
   while (running) {
     res = wait_for_client(listen_socket);
-
     if (res < 0)
-      running = 0;
+      running =0;
     if (res > 0)
       if (create_client_worker(listen_socket))
         running = 0;
-/*
-{
-puts("moof");
-int16_t buf[2*2048];
-snd_pcm_sframes_t n=snd_pcm_readi(soundhandle, (void*) buf , 2048);
-printf("read %li frames\n", n);
-if (n<0) puts(snd_strerror(n));
-}
-*/
   }
 
   snd_pcm_close(soundhandle);
