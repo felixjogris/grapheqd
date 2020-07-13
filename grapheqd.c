@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <pwd.h>
 #include <pthread.h>
+#include <alsa/asoundlib.h>
 #include "kiss_fft.h"
 
 #define GRAPHEQD_VERSION "1"
@@ -144,12 +145,49 @@ static void save_pidfile (char *pidfile)
     errx(1, "cannot close %s", pidfile);
 }
 
-static void drop_user (uid_t uid, gid_t gid)
+static void change_user (struct passwd *pw)
 {
-  if (setgid(gid))
+  if (initgroups(pw->pw_nam, pw->pw_gid))
+    err(1, "initgroups()");
+  if (setgid(pw->pw_gid))
     err(1, "setgid()");
-  if (setuid(uid))
+  if (setuid(pw->pw_uid))
     err(1, "setuid()");
+}
+
+static snd_pcm_t *open_alsa (char *soundcard)
+{
+  snd_pcm_t *handle;
+  snd_pcm_hw_params_t params;
+  int err;
+
+  err = snd_pcm_open(&handle, soundcard, SND_PCM_STREAM_CAPTURE, 0);
+  if (err)
+    errx(1, "cannot open %s for capturing: %s", soundcard, snd_strerror(err));
+
+  err = snd_pcm_hw_params_any(handle, &params);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_any()", snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_format(handle, &params, SND_PCM_FORMAT_S16);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_format(S16)", snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_channels(handle, &params, 2);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_channels(2)", snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_access(handle, &params,
+                                     SND_PCM_ACCESS_RW_NONINTERLEAVED);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_access(NONINTERLEAVED)",
+                      snd_strerror(err));
+
+  err = snd_pcm_hw_params(handle, &params);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params()", snd_strerror(err));
+
+  return handle;
 }
 
 static void show_help ()
@@ -180,6 +218,7 @@ int main (int argc, char **argv)
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL,
        *soundcard = "hw:0";
   struct passwd *user = NULL;
+  snd_pcm_t *sndcard;
 
   while ((res = getopt(argc, argv, "a:dhl:p:s:u:")) != -1) {
     switch (res) {
@@ -195,17 +234,24 @@ int main (int argc, char **argv)
   }
 
   listen_socket = create_listen_socket_inet(address, port);
-  // open alsa
+  soundhandle = open_alsa(soundcard);
   if (!foreground)
     daemonize();
   if (pidfile)
     save_pidfile(pidfile);
   if (user)
-    drop_user(user->pw_uid, user->pw_gid);
+    change_user(user);
   setup_signals();
+  if (!foreground) {
+    close(0); close(1); close(2);
+  }
+
+//  while (running) {
   // accept loop
+//  }
 
-
+  /* both may fail, e.g. due to changed user privs */
+  snd_pcm_close(soundhandle);
   if (pidfile)
     unlink(pidfile);
 
