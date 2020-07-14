@@ -509,23 +509,49 @@ static int count_client (int i)
   return res;
 }
 
-static int json_display (int new_display_idx, char buf[2048])
+static int json_display (int new_display_idx, char buf[32768])
 {
   return 0;
 }
 
-static int color_display (int new_display_idx, char buf[2048])
+static void set_color (char c, char intens, char *p)
 {
-  return 0;
+  sprintf(p, "%c[%c;36;40m%c%c[0m", 27, intens, c, 27);
 }
 
-static int mono_display (int new_display_idx, char buf[2048])
+static int color_display (int new_display_idx, char buf[32768])
 {
-  int row, col, idx = 1;
-
-  buf[0] = '\n';
+  int row, col, idx = 0;
 
   for (row = DISPLAY_BARS; row > 0; row--) {
+    buf[idx++] = '\n';
+
+    for (col = 0; col < DISPLAY_BANDS; col++) {
+      if (display_buf[new_display_idx][0][col] >= row)
+        set_color('=', '1', &buf[idx + 15 * col]);
+      else
+        set_color('=', '2', &buf[idx + 15 * col]);
+
+      if (display_buf[new_display_idx][1][col] >= row)
+        set_color('=', '1', &buf[idx + 15 * col + 1 + DISPLAY_BANDS * 15]);
+      else
+        set_color('=', '2', &buf[idx + 15 * col + 1 + DISPLAY_BANDS * 15]);
+    }
+
+    buf[idx + DISPLAY_BANDS * 15] = ' ';
+    idx += 2 * DISPLAY_BANDS * 15 + 1;
+  }
+
+  return idx;
+}
+
+static int mono_display (int new_display_idx, char buf[32768])
+{
+  int row, col, idx = 0;
+
+  for (row = DISPLAY_BARS; row > 0; row--) {
+    buf[idx++] = '\n';
+
     for (col = 0; col < DISPLAY_BANDS; col++) {
       buf[idx + col] =
                     (display_buf[new_display_idx][0][col] >= row ? '*' : '.');
@@ -534,21 +560,16 @@ static int mono_display (int new_display_idx, char buf[2048])
     }
 
     buf[idx + DISPLAY_BANDS] = ' ';
-    buf[idx + 2 * DISPLAY_BANDS + 1] = '\n';
-
-    idx += 2 * DISPLAY_BANDS + 2;
+    idx += 2 * DISPLAY_BANDS + 1;
   }
-
-  --idx;
-  buf[idx] = '\0';
 
   return idx;
 }
 
 static void start_display (struct client_worker_arg *arg,
-                           int (*display_func)(int, char[2048]))
+                           int (*display_func)(int, char[32768]))
 {
-  char buf[2048];
+  char buf[32768];
   int res, new_display_idx;
 
   while (1) {
