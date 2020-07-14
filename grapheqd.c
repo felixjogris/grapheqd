@@ -10,7 +10,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <sys/file.h>
 #include <sys/select.h>
 #include <syslog.h>
 #include <sys/socket.h>
@@ -31,7 +30,8 @@
 #define SAMPLING_WIDTH 2    // 16 bit signed per channel per sample
 #define SAMPLING_FORMAT SND_PCM_FORMAT_S16 /* keep in sync to SAMPLING_WIDTH
                                               and every use of int16_t */
-#define DISPLAY_BANDS 27
+#define DISPLAY_BANDS 27 /* 27 bands/buckets per channel displayed */
+#define DISPLAY_BARS 25  /* 25 segments per band */
 #define FFT_SIZE 2048
 
 #define log_error(fmt, params ...) do { \
@@ -181,12 +181,11 @@ static void save_pidfile (char *pidfile)
   int fd, len;
   char pid[16];
 
-  fd = open(pidfile, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
+  fd = open(pidfile, O_CREAT | O_WRONLY | O_TRUNC | O_EXCL | O_NOFOLLOW,
+            S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
   if (fd < 0)
-    err(1, "cannot open %s for writing", pidfile);
-
-  if (flock(fd, LOCK_EX | LOCK_NB))
-    errx(1, "cannot lock %s (grapheqd still running?)", pidfile);
+    err(1, "cannot create %s for writing (if grapheqd is not running, "
+           "please remove stale pidfile)", pidfile);
 
   len = snprintf(pid, sizeof(pid), "%u\n", getpid());
 
@@ -334,6 +333,7 @@ char buf[1024];
           continue;
         }
 
+        /* wait for fft thread to wake us up */
         res = pthread_cond_wait(&display_cond, &display_mtx);
         if (res) {
           log_error("cannot wait for display condition: %s", strerror(res));
@@ -463,6 +463,7 @@ static void * pcm_worker (void *arg0)
   }
 
   while (running) {
+    /* wait for a client thread to wake us up */
     res = pthread_cond_wait(&pcm_cond, &pcm_mtx);
     if (res) {
       log_error("cannot wait for pcm condition: %s", strerror(res));
@@ -483,6 +484,7 @@ static void * pcm_worker (void *arg0)
 
       pcm_buf_idx = 1 - pcm_buf_idx;
 
+      /* wake up fft thread */
       res = pthread_cond_signal(&fft_cond);
       if (res) {
         log_error("cannot signal fft condition: %s", strerror(res));
@@ -497,6 +499,61 @@ ERROR:
     log_error("cannot unlock pcm mutex: %s", strerror(res));
 
   return NULL;
+}
+
+static char fill_band (kiss_fft_cpx (*fft_out)[FFT_SIZE], int start, int end)
+{
+  float sum = 0.;
+  int i;
+
+  for (i = start; i < end; i++)
+    sum += sqrt((*fft_out)[i].r * (*fft_out)[i].r +
+                (*fft_out)[i].i * (*fft_out)[i].i);
+
+  return floor((DISPLAY_BARS * sum) / ((end - start) * 131072.0));
+}
+
+static void fill_bands (kiss_fft_cpx (*fft_out)[FFT_SIZE],
+                        char (*display)[DISPLAY_BANDS])
+{
+  (*display)[0] = fill_band(fft_out,  0,  1); /* 21.5 Hz */
+  (*display)[1] = fill_band(fft_out,  1,  2); /* 43 */ 
+  (*display)[2] = fill_band(fft_out,  2,  3); /* 64.5 */
+  (*display)[3] = fill_band(fft_out,  3,  4); /* 86 */
+  (*display)[4] = fill_band(fft_out,  4,  5); /* 107.5 */
+
+  (*display)[5] = fill_band(fft_out,  5,  7);  /* 129 - 150.5 */
+  (*display)[6] = fill_band(fft_out,  7,  9);  /* 172 - 193.5 */
+  (*display)[7] = fill_band(fft_out,  9,  11); /* 215 - 236.5 */
+
+  (*display)[8] = fill_band(fft_out,  11, 14); /* 258 - 301 */
+  (*display)[9] = fill_band(fft_out,  15, 18); /* 322.5 - 387 */
+
+  (*display)[10] = fill_band(fft_out, 18, 23); /* 408.5 - 494.5 */
+  (*display)[11] = fill_band(fft_out, 23, 28); /* 473 - 602 */
+
+  (*display)[12] = fill_band(fft_out, 28, 37); /* 623.5 - 795.5*/
+  (*display)[13] = fill_band(fft_out, 37, 46); /* 817 - 989 */
+
+  (*display)[14] = fill_band(fft_out, 46, 57); /* 1010.5 - 1225.5 */
+  (*display)[15] = fill_band(fft_out, 57, 69); /* 1247 - 1483.5 */
+
+  (*display)[16] = fill_band(fft_out, 69, 92);  /* 1505 - 1978 */
+  (*display)[17] = fill_band(fft_out, 92, 115); /* 1999.5 - 2472.5 */
+
+  (*display)[18] = fill_band(fft_out, 115, 148); /* 2494 - 3182 */
+  (*display)[19] = fill_band(fft_out, 148, 181); /* 3203.5 - 3891.5 */
+
+  (*display)[20] = fill_band(fft_out, 181, 236); /* 3913 - 5075 */
+  (*display)[21] = fill_band(fft_out, 236, 292); /* 5095.5 - 6278 */
+
+  (*display)[22] = fill_band(fft_out, 292, 378); /* 6299.5 - 8127 */
+  (*display)[23] = fill_band(fft_out, 378, 464); /* 8148.5 - 9976 */
+
+  (*display)[24] = fill_band(fft_out, 464, 604); /* 9997.5 - 12986 */
+  (*display)[25] = fill_band(fft_out, 604, 744); /* 13007.5 - 15996 */
+
+  (*display)[26] = fill_band(fft_out, 744, 1024); /* 16017.5 - 22050 */
 }
 
 static void * fft_worker (void *arg0)
@@ -515,6 +572,7 @@ static void * fft_worker (void *arg0)
   }
 
   while (running) {
+    /* wait for pcm thread to wake us up */
     res = pthread_cond_wait(&fft_cond, &fft_mtx);
     if (res) {
       log_error("cannot wait for fft condition: %s", strerror(res));
@@ -536,14 +594,12 @@ static void * fft_worker (void *arg0)
     kiss_fft(fft_cfg, &lin[0], &lout[0]);
     kiss_fft(fft_cfg, &rin[0], &rout[0]);
 
-    // TODO: fill display per band
-    for (res = 0; res < DISPLAY_BANDS; res++) {
-      display_buf[display_buf_idx][0][res] = 65;
-      display_buf[display_buf_idx][1][res] = 75;
-    }
+    fill_bands(&lout, &display_buf[display_buf_idx][0]);
+    fill_bands(&rout, &display_buf[display_buf_idx][1]);
 
     display_buf_idx = 1 - display_buf_idx;
 
+    /* wake up all client threads */
     res = pthread_cond_broadcast(&display_cond);
     if (res) {
       log_error("cannot signal display condition: %s", strerror(res));
