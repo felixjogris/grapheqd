@@ -436,10 +436,13 @@ static void * pcm_worker (void *arg0)
       break;
     }
 
-    snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
-
     while (num_clients > 0) {
       num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
+
+      if (num_frames < 0) {
+        snd_pcm_prepare(soundhandle);
+        num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
+      }
 
       if (num_frames < 0) {
         log_error("cannot read pcm data: %s", snd_strerror(num_frames));
@@ -514,16 +517,17 @@ char buf[1024];
         new_display_idx = display_idx;
         new_display_idx = 1 - new_display_idx;
 
-for (res = DISPLAY_BARS - 1; res >= 0; res--) {
+for (res = DISPLAY_BARS; res > 0; res--) {
   int i;
   for (i = 0; i < DISPLAY_BANDS; i++) {
-    buf[i] = (display_buf[new_display_idx][0][i] >= res ? '*' : ' ');
-    buf[i + DISPLAY_BANDS + 1] = (display_buf[new_display_idx][1][i] >= res ? '*' : ' ');
+    buf[i] = (display_buf[new_display_idx][0][i] >= res ? '*' : '.');
+    buf[i + DISPLAY_BANDS + 1] = (display_buf[new_display_idx][1][i] >= res ? '*' : '.');
   }
   i = i * 2 + 1;
   buf[i] = '\n';
+  buf[DISPLAY_BANDS] = ' ';
 
-  if (write(arg->socket, buf, i) != i) {
+  if (write(arg->socket, buf, i+1) != i+1) {
     res = 1;
     break;
   }
