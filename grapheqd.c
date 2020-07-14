@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <string.h>
+#include <ctype.h>
 #include <err.h>
 #include <netdb.h>
 #include <errno.h>
@@ -107,7 +108,7 @@ static void setup_signals ()
   setup_signal(SIGTERM, sigterm_handler);
 }
 
-static struct passwd *get_user (char *username)
+static struct passwd *get_user (const char *username)
 {
   struct passwd *pw = getpwnam(username);
 
@@ -117,7 +118,7 @@ static struct passwd *get_user (char *username)
   return pw;
 }
 
-static int create_listen_socket_inet (char *ip, char *port)
+static int create_listen_socket_inet (const char *ip, const char *port)
 {
   int listen_socket, yes, res;
   struct addrinfo hints, *result, *walk;
@@ -177,7 +178,7 @@ static void daemonize ()
     err(1, "chdir(/)");
 }
 
-static void save_pidfile (char *pidfile)
+static void save_pidfile (const char *pidfile)
 {
   int fd, len;
   char pid[16];
@@ -207,7 +208,7 @@ static void change_user (struct passwd *pw)
     err(1, "setuid()");
 }
 
-static snd_pcm_t *open_alsa (char *soundcard)
+static snd_pcm_t *open_alsa (const char *soundcard)
 {
   snd_pcm_t *handle;
   snd_pcm_hw_params_t *params;
@@ -508,135 +509,217 @@ static int count_client (int i)
   return res;
 }
 
-static void start_display(struct client_worker *arg, void (*display_func)())
+static int json_display (int new_display_idx, char buf[2048])
 {
+  return 0;
 }
 
-static int send_http (struct client_worker *arg)
+static int color_display (int new_display_idx, char buf[2048])
 {
+  return 0;
+}
+
+static int mono_display (int new_display_idx, char buf[2048])
+{
+  int row, col, idx = 1;
+
+  buf[0] = '\n';
+
+  for (row = DISPLAY_BARS; row > 0; row--) {
+    for (col = 0; col < DISPLAY_BANDS; col++) {
+      buf[idx + col] =
+                    (display_buf[new_display_idx][0][col] >= row ? '*' : '.');
+      buf[idx + col + DISPLAY_BANDS + 1] =
+                    (display_buf[new_display_idx][1][col] >= row ? '*' : '.');
+    }
+
+    buf[idx + DISPLAY_BANDS] = ' ';
+    buf[idx + 2 * DISPLAY_BANDS + 1] = '\n';
+
+    idx += 2 * DISPLAY_BANDS + 2;
+  }
+
+  --idx;
+  buf[idx] = '\0';
+
+  return idx;
+}
+
+static void start_display (struct client_worker_arg *arg,
+                           int (*display_func)(int, char[2048]))
+{
+  char buf[2048];
+  int res, new_display_idx;
+
+  while (1) {
+    /* wake up pcm thread */
+    res = pthread_cond_signal(&pcm_cond);
+    if (res) {
+      log_error("cannot signal pcm condition: %s", strerror(res));
+      return;
+    }
+// TODO: increase mutex
+    res = pthread_mutex_lock(&display_mtx);
+    if (res) {
+      log_error("cannot lock display mutex: %s", strerror(res));
+      return;
+    }
+
+    /* wait for fft thread to wake us up */
+    res = pthread_cond_wait(&display_cond, &display_mtx);
+    if (res) {
+      log_error("cannot wait for display condition: %s", strerror(res));
+      return;
+    }
+
+    res = pthread_mutex_unlock(&display_mtx);
+    if (res) {
+      log_error("cannot unlock display mutex: %s", strerror(res));
+      return;
+    }
+
+    new_display_idx = display_idx;
+    new_display_idx = 1 - new_display_idx;
+
+    res = (*display_func)(new_display_idx, buf);
+
+    if (write(arg->socket, buf, res) != res)
+      return;
+  }
+}
+
+static void log_http (struct client_worker_arg *arg, const char *url,
+                      int code)
+{
+  log_info("%s \"%s\" %i", arg->clientname, url, code);
+}
+
+static char *http_reason (int code)
+{
+  switch (code) {
+    case 101: return "Switching Protocols";
+    case 200: return "OK";
+    case 400: return "Bad Request";
+    case 404: return "Not Found";
+    default:  return "Internal Server Error";
+  }
+}
+
+static int send_http (struct client_worker_arg *arg, const char *url,
+                      int code, int connection_close,
+                      const char *header_and_content)
+{
+  char buf[sizeof("HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\0")];
   int res;
+
+  log_http(arg, url, code);
+
+  snprintf(buf, sizeof(buf),
+           "HTTP/1.1 %i %s\r\n"
+           "%s",
+           code, http_reason(code),
+           (connection_close ? "Connection: close\r\n" : ""));
+
+  res = write(arg->socket, buf, strlen(buf));
+  if ((res < 0) || (res != (signed) strlen(buf)))
+    return -1;
+
+  res = write(arg->socket, header_and_content, strlen(header_and_content));
+  if ((res < 0) || (res != (signed) strlen(header_and_content)))
+    return -1;
+
+  if (connection_close) {
+    close(arg->socket);
+    return 1;
+  }
+
+  return 0;
 }
 
-static int read_http (struct client_worker *arg)
+static int read_http (struct client_worker_arg *arg)
 {
-  char buf[8192];
-  int idx = 0, res;
-const char const *rootpage = "root page";
-const char const *favicon = "favicon";
-  const char const *websocket_header = "Upgrade: websocket\r\n"
-                                       "Connection: Upgrade\r\n";
+  char buf[8192], *p;
+  unsigned int idx = 0;
+  int res, connection_close = 0;
+/* TODO */
+const char * const rootpage = "Content-Type: text/html\r\n"
+                              "Content-Length: 5\r\n\r\nhello";
+const char * const favicon = "Content-Type: image/x-icon\r\n"
+                             "Content-Length: 0\r\n\r\n";
+  const char * const websocket_header = "Upgrade: websocket\r\n"
+                                        "Connection: Upgrade\r\n";
 
-  while (idx < sizeof(buf)) {
-    res = read(arg->socket, &buf[idx], sizeof(buf) - idx);
+  while (idx < sizeof(buf) - 1) {
+    res = read(arg->socket, &buf[idx], sizeof(buf) - idx - 1);
     if (res <= 0)
       break;
 
     if (buf[0] == 'm') {
+      log_http(arg, "m", 200);
       start_display(arg, &mono_display);
       return 1;
     }
 
     if (buf[0] == 'c') {
+      log_http(arg, "c", 200);
       start_display(arg, &color_display);
       return 1;
     }
 
     idx += res;
+    buf[idx] = '\0';
 
-    if (strncmp(buf, "\r\n\r\n", idx))
+    if (!strstr(buf, "\r\n\r\n"))
       continue;
 
-    if (!strncasecmp(buf, "GET / ", idx))
-      return send_http(arg, 200, "text/html", NULL, rootpage);
+    connection_close = (strcasestr(buf, "\r\nConnection: close\r\n") != NULL);
 
-    if (!strncasecmp(buf, "GET /favicon.ico ", idx))
-      return send_http(arg, 200, "image/x-icon", NULL, favicon);
+    if (!strncasecmp(buf, "GET / ", strlen("GET / ")))
+      return send_http(arg, "/", 200, connection_close, rootpage);
 
-    if (!strncasecmp(buf, "GET /json ", idx) &&
-        !strncasecmp(buf, "\r\nConnection: Upgrade\r\n", idx) &&
-        !strncasecmp(buf, "\r\nUpgrade: websocket\r\n", idx)) {
-      if (!send_http(arg, 101, NULL, websocket_header, NULL))
+    if (!strncasecmp(buf, "GET /favicon.ico ", strlen("GET /favicon.ico ")))
+      return send_http(arg, "/favicon.ico", 200, connection_close, favicon);
+
+    if (!strncasecmp(buf, "GET /json ", strlen("GET /json ")) &&
+        strcasestr(buf, "\r\nConnection: Upgrade\r\n") &&
+        strcasestr(buf, "\r\nUpgrade: websocket\r\n")) {
+      if (!send_http(arg, "/json", 101, 0, websocket_header))
         start_display(arg, &json_display);
       return 1;
     }
 
-    return send_http(arg, 404, "text/plain", NULL, "Not found.");
+    p = strchr(buf, '\r');
+    *p = '\0';
+
+    return send_http(arg, buf, 404, connection_close,
+                     "Content-Type: text/plain\r\n"
+                     "Content-Length: 12\r\n"
+                     "\r\n"
+                     "Not found.\r\n");
   }
 
-  return send_http(arg, 400, "text/plain", NULL, "Bad request.");
+  return send_http(arg, "", 400, connection_close,
+                   "Content-Type: text/plain\r\n"
+                   "Content-Length: 14\r\n"
+                   "\r\n"
+                   "Bad Request.\r\n");
 }
 
 static void *client_worker (void *arg0)
 {
   struct client_worker_arg *arg = arg0;
-  int res = 0;
-  int new_display_idx;
-  char buf[8192], buf_idx;
+  int res;
 
   pthread_setname_np(pthread_self(), "grapheqd:client");
   client_address(arg);
   count_client(1);
 
-  while (res == 0) {
-    res = read_http(arg->socket);
-  }
-
-// TODO: http
-  while ((res = read(arg->socket, buf, 1024)) > 0) {
-    if (!strncmp(buf, "switch", 5)) {
-      for (res = 0; res == 0;) {
-        /* wake up pcm thread */
-        res = pthread_cond_signal(&pcm_cond);
-        if (res) {
-          log_error("cannot signal pcm condition: %s", strerror(res));
-          continue;
-        }
-// TODO: increase mutex
-        res = pthread_mutex_lock(&display_mtx);
-        if (res) {
-          log_error("cannot lock display mutex: %s", strerror(res));
-          continue;
-        }
-
-        /* wait for fft thread to wake us up */
-        res = pthread_cond_wait(&display_cond, &display_mtx);
-        if (res) {
-          log_error("cannot wait for display condition: %s", strerror(res));
-          continue;
-        }
-
-        res = pthread_mutex_unlock(&display_mtx);
-        if (res) {
-          log_error("cannot unlock display mutex: %s", strerror(res));
-          continue;
-        }
-
-        new_display_idx = display_idx;
-        new_display_idx = 1 - new_display_idx;
-
-for (res = DISPLAY_BARS; res > 0; res--) {
-  int i;
-  for (i = 0; i < DISPLAY_BANDS; i++) {
-    buf[i] = (display_buf[new_display_idx][0][i] >= res ? '*' : '.');
-    buf[i + DISPLAY_BANDS + 1] = (display_buf[new_display_idx][1][i] >= res ? '*' : '.');
-  }
-  i = i * 2 + 1;
-  buf[i] = '\n';
-  buf[DISPLAY_BANDS] = ' ';
-
-  if (write(arg->socket, buf, i+1) != i+1) {
-    res = 1;
-    break;
-  }
-}
-      }
-if (res) break;
-    }
-  }
+  do {
+    res = read_http(arg);
+  } while (res == 0);
 
   count_client(-1);
   close(arg->socket);
-// TODO: http log line somewhere
 
   return NULL;
 }
@@ -693,7 +776,7 @@ static int wait_for_client (int listen_socket)
 }
 
 static void create_helper_worker (void *(*start_routine)(void*), void *arg,
-                                  char *name)
+                                  const char *name)
 {
   int res;
   pthread_t thread;
