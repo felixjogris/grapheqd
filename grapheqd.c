@@ -144,6 +144,14 @@ static int create_listen_socket_inet (const char *ip, const char *port)
       continue;
     }
 
+    yes = 1;
+    res = setsockopt(listen_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
+                     sizeof(yes));
+    if (res != 0) {
+      close(listen_socket);
+      continue;
+    }
+
     if (bind(listen_socket, walk->ai_addr, walk->ai_addrlen) == 0)
       break;
 
@@ -155,7 +163,6 @@ static int create_listen_socket_inet (const char *ip, const char *port)
   }
 
   freeaddrinfo(result);
-
 
   if (listen(listen_socket, 0) != 0)
     err(1, "listen()");
