@@ -133,11 +133,22 @@ static int create_listen_socket_inet (const char *ip, const char *port)
 
   for (walk = result;;) {
     listen_socket = socket(walk->ai_family, walk->ai_socktype, 0);
-    if ((listen_socket >= 0) &&
-        (bind(listen_socket, walk->ai_addr, walk->ai_addrlen) == 0))
+    if (listen_socket < 0)
+      continue;
+
+    yes = 1;
+    res = setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &yes,
+                     sizeof(yes));
+    if (res != 0) {
+      close(listen_socket);
+      continue;
+    }
+
+    if (bind(listen_socket, walk->ai_addr, walk->ai_addrlen) == 0)
       break;
 
-    if (walk->ai_next == NULL)
+    walk = walk->ai_next;
+    if (!walk)
       err(1, "bind()");
 
     close(listen_socket);
@@ -145,15 +156,6 @@ static int create_listen_socket_inet (const char *ip, const char *port)
 
   freeaddrinfo(result);
 
-  yes = 1;
-  res = setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
-  if (res != 0)
-    err(1, "setsockopt(REUSEPORT)");
-
-  yes = 1;
-  res = setsockopt(listen_socket, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
-  if (res != 0)
-    err(1, "setsockopt(KEEPALIVE)");
 
   if (listen(listen_socket, 0) != 0)
     err(1, "listen()");
@@ -683,7 +685,9 @@ const char * const favicon = "Content-Type: image/x-icon\r\n"
 
     if (buf[0] == 'c') {
       log_http(arg, "c", 200);
-      start_display(arg, &color_display);
+      sprintf(buf, "%c]2;grapheqd%c\\", 27, 27);
+      if (write(arg->socket, buf, strlen(buf)) == (signed) strlen(buf))
+        start_display(arg, &color_display);
       return 1;
     }
 
@@ -749,7 +753,7 @@ static int create_client_worker (int listen_socket)
 {
   pthread_t thread;
   struct client_worker_arg *arg;
-  int res;
+  int res, yes;
 
   arg = malloc(sizeof(*arg));
   if (arg == NULL) {
@@ -764,6 +768,15 @@ static int create_client_worker (int listen_socket)
 
   if (arg->socket < 0) {
     log_error("accept(): %s", strerror(errno));
+    free(arg);
+    return 0;
+  }
+
+  yes = 1;
+  res = setsockopt(arg->socket, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+  if (res != 0) {
+    log_error("cannot set keepalive for client socket: %s", strerror(res));
+    close(arg->socket);
     free(arg);
     return 0;
   }
@@ -785,7 +798,9 @@ static int wait_for_client (int listen_socket)
 
   res = select(listen_socket + 1, &rfds, NULL, NULL, NULL);
 
-  if (res < 0) {
+  if (res > 0) {
+    res = create_client_worker(listen_socket);
+  } else if (res < 0) {
     if (errno == EINTR) {
       res = 0;
     } else {
@@ -887,12 +902,11 @@ int main (int argc, char **argv)
     res = wait_for_client(listen_socket);
     if (res < 0)
       running = 0;
-    if (res > 0)
-      if (create_client_worker(listen_socket))
-        running = 0;
   }
 
   snd_pcm_close(soundhandle);
+  close(listen_socket);
+
   if (pidfile)
     unlink(pidfile); /* may fail, e.g. due to changed user privs */
 
