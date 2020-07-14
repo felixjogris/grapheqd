@@ -318,9 +318,11 @@ char buf[1024];
   client_address(arg);
   ++num_clients;
 
+// TODO: http
   while ((res = read(arg->socket, buf, 1024)) > 0) {
     if (!strncmp(buf, "switch", 5)) {
       for (res = 0; res == 0;) {
+        /* wake up pcm thread */
         res = pthread_cond_signal(&pcm_cond);
         if (res) {
           log_error("cannot signal pcm condition: %s", strerror(res));
@@ -348,11 +350,10 @@ char buf[1024];
 
         new_display_buf_idx = display_buf_idx;
         new_display_buf_idx = 1 - new_display_buf_idx;
+
 snprintf(buf, 1024,
-"Left:\n"
-"%c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c\n"
-"Right:\n"
-"%c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c %c\n",
+"L:%i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i\n"
+"R:%i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i\n",
 display_buf[new_display_buf_idx][0][0],
 display_buf[new_display_buf_idx][0][1],
 display_buf[new_display_buf_idx][0][2],
@@ -407,13 +408,17 @@ display_buf[new_display_buf_idx][1][23],
 display_buf[new_display_buf_idx][1][24],
 display_buf[new_display_buf_idx][1][25],
 display_buf[new_display_buf_idx][1][26]);
-write(arg->socket, buf, strlen(buf));
+
+if (write(arg->socket, buf, strlen(buf)) != (signed) strlen(buf))
+  res = 1;
       }
 if (res) break;
     }
   }
 
   --num_clients;
+  close(arg->socket);
+// TODO: http log line somewhere
 
   return NULL;
 }
