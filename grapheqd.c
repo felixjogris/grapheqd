@@ -57,7 +57,7 @@ struct client_worker_arg {
   int socket;
 };
 
-static int pcm_buf_idx = 0;
+static int pcm_idx = 0;
 static int16_t pcm_buf[2][FFT_SIZE * SAMPLING_CHANNELS];
 static pthread_mutex_t pcm_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pcm_cond = PTHREAD_COND_INITIALIZER;
@@ -65,8 +65,8 @@ static pthread_mutex_t fft_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t fft_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t display_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t display_cond = PTHREAD_COND_INITIALIZER;
-static int display_buf_idx = 0;
-static char display_buf[2][SAMPLING_CHANNELS][DISPLAY_BANDS];
+static int display_idx = 0;
+static unsigned char display_buf[2][SAMPLING_CHANNELS][DISPLAY_BANDS];
 static int num_clients = 0;
 
 /* used by main() and sigterm_handler() */
@@ -237,12 +237,12 @@ static snd_pcm_t *open_alsa (char *soundcard)
 
   err = snd_pcm_hw_params_set_channels(handle, params, SAMPLING_CHANNELS);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_channels("
+warnx("%s: %s", "snd_pcm_hw_params_set_channels("
                       STR(SAMPLING_CHANNELS) ")", snd_strerror(err));
 
   err = snd_pcm_hw_params_set_rate(handle, params, SAMPLING_RATE, 0);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_rate(" STR(SAMPLING_RATE) ")",
+warnx( "%s: %s", "snd_pcm_hw_params_set_rate(" STR(SAMPLING_RATE) ")",
                       snd_strerror(err));
 
   err = snd_pcm_hw_params_set_period_size(handle, params, FFT_SIZE, 0);
@@ -257,27 +257,6 @@ static snd_pcm_t *open_alsa (char *soundcard)
   snd_pcm_hw_params_free(params);
 
   return handle;
-}
-
-static int wait_for_client (int listen_socket)
-{
-  int res;
-  fd_set rfds;
-
-  FD_ZERO(&rfds);
-  FD_SET(listen_socket, &rfds);
-
-  res = select(listen_socket + 1, &rfds, NULL, NULL, NULL);
-
-  if (res < 0) {
-    if (errno == EINTR) {
-      res = 0;
-    } else {
-      log_error("select(): %s", strerror(errno));
-    }
-  }
-
-  return res;
 }
 
 static void client_address (struct client_worker_arg *arg)
@@ -307,11 +286,195 @@ static void client_address (struct client_worker_arg *arg)
   }
 }
 
+static char fill_band (float (*level)[FFT_SIZE / 2], float max_level,
+                       int start, int end)
+{
+  float sum = 0.;
+  int i;
+
+  for (i = start; i < end; i++)
+    sum += (*level)[i];
+
+  return floor((DISPLAY_BARS * sum) / ((end - start) * max_level));
+}
+
+static void fill_bands (float (*level)[FFT_SIZE / 2], float max_level,
+                        unsigned char (*display)[DISPLAY_BANDS])
+{
+  (*display)[0] = fill_band(level, max_level,  0,  1); /* 21.5 Hz */
+  (*display)[1] = fill_band(level, max_level,  1,  2); /* 43 */ 
+  (*display)[2] = fill_band(level, max_level,  2,  3); /* 64.5 */
+  (*display)[3] = fill_band(level, max_level,  3,  4); /* 86 */
+  (*display)[4] = fill_band(level, max_level,  4,  5); /* 107.5 */
+
+  (*display)[5] = fill_band(level, max_level,  5,  7);  /* 129 - 150.5 */
+  (*display)[6] = fill_band(level, max_level,  7,  9);  /* 172 - 193.5 */
+  (*display)[7] = fill_band(level, max_level,  9,  11); /* 215 - 236.5 */
+
+  (*display)[8] = fill_band(level, max_level,  11, 14); /* 258 - 301 */
+  (*display)[9] = fill_band(level, max_level,  15, 18); /* 322.5 - 387 */
+
+  (*display)[10] = fill_band(level, max_level, 18, 23); /* 408.5 - 494.5 */
+  (*display)[11] = fill_band(level, max_level, 23, 28); /* 473 - 602 */
+
+  (*display)[12] = fill_band(level, max_level, 28, 37); /* 623.5 - 795.5*/
+  (*display)[13] = fill_band(level, max_level, 37, 46); /* 817 - 989 */
+
+  (*display)[14] = fill_band(level, max_level, 46, 57); /* 1010.5 - 1225.5 */
+  (*display)[15] = fill_band(level, max_level, 57, 69); /* 1247 - 1483.5 */
+
+  (*display)[16] = fill_band(level, max_level, 69, 92);  /* 1505 - 1978 */
+  (*display)[17] = fill_band(level, max_level, 92, 115); /* 1999.5 - 2472.5 */
+
+  (*display)[18] = fill_band(level, max_level, 115, 148); /* 2494 - 3182 */
+  (*display)[19] = fill_band(level, max_level, 148, 181); /* 3203.5 - 3891.5 */
+
+  (*display)[20] = fill_band(level, max_level, 181, 236); /* 3913 - 5075 */
+  (*display)[21] = fill_band(level, max_level, 236, 292); /* 5095.5 - 6278 */
+
+  (*display)[22] = fill_band(level, max_level, 292, 378); /* 6299.5 - 8127 */
+  (*display)[23] = fill_band(level, max_level, 378, 464); /* 8148.5 - 9976 */
+
+  (*display)[24] = fill_band(level, max_level, 464, 604); /* 9997.5 - 12986 */
+  (*display)[25] = fill_band(level, max_level, 604, 744); /* 13007.5 - 15996 */
+
+  (*display)[26] = fill_band(level, max_level, 744, 1024); /* 16017.5 - 22050 */
+}
+
+static void * fft_worker (void *arg0)
+{
+  kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
+  int res, i, new_pcm_idx;
+  kiss_fft_cpx lin[FFT_SIZE], rin[FFT_SIZE];
+  kiss_fft_cpx lout[FFT_SIZE], rout[FFT_SIZE];
+  float llevel[FFT_SIZE / 2], rlevel[FFT_SIZE / 2];
+  static float max_level = 131072.;
+
+  pthread_setname_np(pthread_self(), "grapheqd:fft");
+
+  res = pthread_mutex_lock(&fft_mtx);
+  if (res) {
+    log_error("cannot lock fft mutex: %s", strerror(res));
+    return NULL;
+  }
+
+  while (running) {
+    /* wait for pcm thread to wake us up */
+    res = pthread_cond_wait(&fft_cond, &fft_mtx);
+    if (res) {
+      log_error("cannot wait for fft condition: %s", strerror(res));
+      break;
+    }
+
+    new_pcm_idx = pcm_idx;
+    new_pcm_idx = 1 - new_pcm_idx;
+
+    for (i = 0; i < FFT_SIZE; i++) {
+      /* left channel */
+      lin[i].r = pcm_buf[new_pcm_idx][2 * i];
+      lin[i].i = 0;
+      /* right channel */
+      rin[i].r = pcm_buf[new_pcm_idx][2 * i + 1];
+      rin[i].i = 0;
+    }
+
+    kiss_fft(fft_cfg, &lin[0], &lout[0]);
+    kiss_fft(fft_cfg, &rin[0], &rout[0]);
+
+    for (i = 0; i < FFT_SIZE / 2; i++) {
+      llevel[i] = sqrt(lout[i].r * lout[i].r + lout[i].i * lout[i].i);
+      rlevel[i] = sqrt(rout[i].r * rout[i].r + rout[i].i * rout[i].i);
+      if (llevel[i] > max_level) {
+        max_level = llevel[i];
+        log_info("max_level=%f", max_level);
+      }
+      if (rlevel[i] > max_level) {
+        max_level = rlevel[i];
+        log_info("max_level=%f", max_level);
+      }
+    }
+
+    fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
+    fill_bands(&rlevel, max_level, &display_buf[display_idx][1]);
+
+    display_idx = 1 - display_idx;
+
+    /* wake up all client threads */
+    res = pthread_cond_broadcast(&display_cond);
+    if (res) {
+      log_error("cannot signal display condition: %s", strerror(res));
+      break;
+    }
+  }
+
+  res = pthread_mutex_unlock(&fft_mtx);
+  if (res)
+    log_error("cannot unlock fft mutex: %s", strerror(res));
+
+  return NULL;
+}
+
+static void * pcm_worker (void *arg0)
+{
+  snd_pcm_t *soundhandle = (snd_pcm_t*) arg0;
+  int res;
+  snd_pcm_sframes_t num_frames;
+
+  pthread_setname_np(pthread_self(), "grapheqd:pcm");
+
+  res = pthread_mutex_lock(&pcm_mtx);
+  if (res) {
+    log_error("cannot lock pcm mutex: %s", strerror(res));
+    return NULL;
+  }
+
+  while (running) {
+    /* wait for a client thread to wake us up */
+    res = pthread_cond_wait(&pcm_cond, &pcm_mtx);
+    if (res) {
+      log_error("cannot wait for pcm condition: %s", strerror(res));
+      break;
+    }
+
+    snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
+
+    while (num_clients > 0) {
+      num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
+
+      if (num_frames < 0) {
+        log_error("cannot read pcm data: %s", snd_strerror(num_frames));
+        goto ERROR;
+      }
+
+      if (num_frames != FFT_SIZE) {
+        log_error("read %li bytes of pcm data instead of %i", num_frames,
+                  FFT_SIZE);
+      }
+
+      pcm_idx = 1 - pcm_idx;
+
+      /* wake up fft thread */
+      res = pthread_cond_signal(&fft_cond);
+      if (res) {
+        log_error("cannot signal fft condition: %s", strerror(res));
+        goto ERROR;
+      }
+    }
+  }
+
+ERROR:
+  res = pthread_mutex_unlock(&pcm_mtx);
+  if (res)
+    log_error("cannot unlock pcm mutex: %s", strerror(res));
+
+  return NULL;
+}
+
 static void * client_worker (void *arg0)
 {
   struct client_worker_arg *arg = arg0;
   int res;
-  int new_display_buf_idx;
+  int new_display_idx;
 char buf[1024];
 
   pthread_setname_np(pthread_self(), "grapheqd:client");
@@ -348,69 +511,23 @@ char buf[1024];
           continue;
         }
 
-        new_display_buf_idx = display_buf_idx;
-        new_display_buf_idx = 1 - new_display_buf_idx;
+        new_display_idx = display_idx;
+        new_display_idx = 1 - new_display_idx;
 
-snprintf(buf, 1024,
-"L:%i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i\n"
-"R:%i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i\n",
-display_buf[new_display_buf_idx][0][0],
-display_buf[new_display_buf_idx][0][1],
-display_buf[new_display_buf_idx][0][2],
-display_buf[new_display_buf_idx][0][3],
-display_buf[new_display_buf_idx][0][4],
-display_buf[new_display_buf_idx][0][5],
-display_buf[new_display_buf_idx][0][6],
-display_buf[new_display_buf_idx][0][7],
-display_buf[new_display_buf_idx][0][8],
-display_buf[new_display_buf_idx][0][9],
-display_buf[new_display_buf_idx][0][10],
-display_buf[new_display_buf_idx][0][11],
-display_buf[new_display_buf_idx][0][12],
-display_buf[new_display_buf_idx][0][13],
-display_buf[new_display_buf_idx][0][14],
-display_buf[new_display_buf_idx][0][15],
-display_buf[new_display_buf_idx][0][16],
-display_buf[new_display_buf_idx][0][17],
-display_buf[new_display_buf_idx][0][18],
-display_buf[new_display_buf_idx][0][19],
-display_buf[new_display_buf_idx][0][20],
-display_buf[new_display_buf_idx][0][21],
-display_buf[new_display_buf_idx][0][22],
-display_buf[new_display_buf_idx][0][23],
-display_buf[new_display_buf_idx][0][24],
-display_buf[new_display_buf_idx][0][25],
-display_buf[new_display_buf_idx][0][26],
-display_buf[new_display_buf_idx][1][0],
-display_buf[new_display_buf_idx][1][1],
-display_buf[new_display_buf_idx][1][2],
-display_buf[new_display_buf_idx][1][3],
-display_buf[new_display_buf_idx][1][4],
-display_buf[new_display_buf_idx][1][5],
-display_buf[new_display_buf_idx][1][6],
-display_buf[new_display_buf_idx][1][7],
-display_buf[new_display_buf_idx][1][8],
-display_buf[new_display_buf_idx][1][9],
-display_buf[new_display_buf_idx][1][10],
-display_buf[new_display_buf_idx][1][11],
-display_buf[new_display_buf_idx][1][12],
-display_buf[new_display_buf_idx][1][13],
-display_buf[new_display_buf_idx][1][14],
-display_buf[new_display_buf_idx][1][15],
-display_buf[new_display_buf_idx][1][16],
-display_buf[new_display_buf_idx][1][17],
-display_buf[new_display_buf_idx][1][18],
-display_buf[new_display_buf_idx][1][19],
-display_buf[new_display_buf_idx][1][20],
-display_buf[new_display_buf_idx][1][21],
-display_buf[new_display_buf_idx][1][22],
-display_buf[new_display_buf_idx][1][23],
-display_buf[new_display_buf_idx][1][24],
-display_buf[new_display_buf_idx][1][25],
-display_buf[new_display_buf_idx][1][26]);
+for (res = DISPLAY_BARS - 1; res >= 0; res--) {
+  int i;
+  for (i = 0; i < DISPLAY_BANDS; i++) {
+    buf[i] = (display_buf[new_display_idx][0][i] >= res ? '*' : ' ');
+    buf[i + DISPLAY_BANDS + 1] = (display_buf[new_display_idx][1][i] >= res ? '*' : ' ');
+  }
+  i = i * 2 + 1;
+  buf[i] = '\n';
 
-if (write(arg->socket, buf, strlen(buf)) != (signed) strlen(buf))
-  res = 1;
+  if (write(arg->socket, buf, i) != i) {
+    res = 1;
+    break;
+  }
+}
       }
 if (res) break;
     }
@@ -453,170 +570,25 @@ static int create_client_worker (int listen_socket)
   return res;
 }
 
-static void * pcm_worker (void *arg0)
+static int wait_for_client (int listen_socket)
 {
-  snd_pcm_t *soundhandle = (snd_pcm_t*) arg0;
   int res;
-  snd_pcm_sframes_t num_frames;
+  fd_set rfds;
 
-  pthread_setname_np(pthread_self(), "grapheqd:pcm");
+  FD_ZERO(&rfds);
+  FD_SET(listen_socket, &rfds);
 
-  res = pthread_mutex_lock(&pcm_mtx);
-  if (res) {
-    log_error("cannot lock pcm mutex: %s", strerror(res));
-    return NULL;
-  }
+  res = select(listen_socket + 1, &rfds, NULL, NULL, NULL);
 
-  while (running) {
-    /* wait for a client thread to wake us up */
-    res = pthread_cond_wait(&pcm_cond, &pcm_mtx);
-    if (res) {
-      log_error("cannot wait for pcm condition: %s", strerror(res));
-      break;
-    }
-
-    while (num_clients > 0) {
-      num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_buf_idx],
-                                 FFT_SIZE);
-      if (num_frames < 0) {
-        log_error("cannot read pcm data: %s", snd_strerror(num_frames));
-        goto ERROR;
-      }
-      if (num_frames != FFT_SIZE) {
-        log_error("read %li bytes of pcm data instead of %i", num_frames,
-                  FFT_SIZE);
-      }
-
-      pcm_buf_idx = 1 - pcm_buf_idx;
-
-      /* wake up fft thread */
-      res = pthread_cond_signal(&fft_cond);
-      if (res) {
-        log_error("cannot signal fft condition: %s", strerror(res));
-        goto ERROR;
-      }
+  if (res < 0) {
+    if (errno == EINTR) {
+      res = 0;
+    } else {
+      log_error("select(): %s", strerror(errno));
     }
   }
 
-ERROR:
-  res = pthread_mutex_unlock(&pcm_mtx);
-  if (res)
-    log_error("cannot unlock pcm mutex: %s", strerror(res));
-
-  return NULL;
-}
-
-static char fill_band (kiss_fft_cpx (*fft_out)[FFT_SIZE], int start, int end)
-{
-  float sum = 0.;
-  int i;
-
-  for (i = start; i < end; i++)
-    sum += sqrt((*fft_out)[i].r * (*fft_out)[i].r +
-                (*fft_out)[i].i * (*fft_out)[i].i);
-
-  return floor((DISPLAY_BARS * sum) / ((end - start) * 131072.0));
-}
-
-static void fill_bands (kiss_fft_cpx (*fft_out)[FFT_SIZE],
-                        char (*display)[DISPLAY_BANDS])
-{
-  (*display)[0] = fill_band(fft_out,  0,  1); /* 21.5 Hz */
-  (*display)[1] = fill_band(fft_out,  1,  2); /* 43 */ 
-  (*display)[2] = fill_band(fft_out,  2,  3); /* 64.5 */
-  (*display)[3] = fill_band(fft_out,  3,  4); /* 86 */
-  (*display)[4] = fill_band(fft_out,  4,  5); /* 107.5 */
-
-  (*display)[5] = fill_band(fft_out,  5,  7);  /* 129 - 150.5 */
-  (*display)[6] = fill_band(fft_out,  7,  9);  /* 172 - 193.5 */
-  (*display)[7] = fill_band(fft_out,  9,  11); /* 215 - 236.5 */
-
-  (*display)[8] = fill_band(fft_out,  11, 14); /* 258 - 301 */
-  (*display)[9] = fill_band(fft_out,  15, 18); /* 322.5 - 387 */
-
-  (*display)[10] = fill_band(fft_out, 18, 23); /* 408.5 - 494.5 */
-  (*display)[11] = fill_band(fft_out, 23, 28); /* 473 - 602 */
-
-  (*display)[12] = fill_band(fft_out, 28, 37); /* 623.5 - 795.5*/
-  (*display)[13] = fill_band(fft_out, 37, 46); /* 817 - 989 */
-
-  (*display)[14] = fill_band(fft_out, 46, 57); /* 1010.5 - 1225.5 */
-  (*display)[15] = fill_band(fft_out, 57, 69); /* 1247 - 1483.5 */
-
-  (*display)[16] = fill_band(fft_out, 69, 92);  /* 1505 - 1978 */
-  (*display)[17] = fill_band(fft_out, 92, 115); /* 1999.5 - 2472.5 */
-
-  (*display)[18] = fill_band(fft_out, 115, 148); /* 2494 - 3182 */
-  (*display)[19] = fill_band(fft_out, 148, 181); /* 3203.5 - 3891.5 */
-
-  (*display)[20] = fill_band(fft_out, 181, 236); /* 3913 - 5075 */
-  (*display)[21] = fill_band(fft_out, 236, 292); /* 5095.5 - 6278 */
-
-  (*display)[22] = fill_band(fft_out, 292, 378); /* 6299.5 - 8127 */
-  (*display)[23] = fill_band(fft_out, 378, 464); /* 8148.5 - 9976 */
-
-  (*display)[24] = fill_band(fft_out, 464, 604); /* 9997.5 - 12986 */
-  (*display)[25] = fill_band(fft_out, 604, 744); /* 13007.5 - 15996 */
-
-  (*display)[26] = fill_band(fft_out, 744, 1024); /* 16017.5 - 22050 */
-}
-
-static void * fft_worker (void *arg0)
-{
-  kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
-  int res, new_pcm_buf_idx;
-  kiss_fft_cpx lin[FFT_SIZE], rin[FFT_SIZE];
-  kiss_fft_cpx lout[FFT_SIZE], rout[FFT_SIZE];
-
-  pthread_setname_np(pthread_self(), "grapheqd:fft");
-
-  res = pthread_mutex_lock(&fft_mtx);
-  if (res) {
-    log_error("cannot lock fft mutex: %s", strerror(res));
-    return NULL;
-  }
-
-  while (running) {
-    /* wait for pcm thread to wake us up */
-    res = pthread_cond_wait(&fft_cond, &fft_mtx);
-    if (res) {
-      log_error("cannot wait for fft condition: %s", strerror(res));
-      break;
-    }
-
-    new_pcm_buf_idx = pcm_buf_idx;
-    new_pcm_buf_idx = 1 - new_pcm_buf_idx;
-
-    for (res = 0; res < FFT_SIZE; res++) {
-      /* left channel */
-      lin[res].r = pcm_buf[new_pcm_buf_idx][2 * res];
-      lin[res].i = 0;
-      /* right channel */
-      rin[res].r = pcm_buf[new_pcm_buf_idx][2 * res + 1];
-      rin[res].i = 0;
-    }
-
-    kiss_fft(fft_cfg, &lin[0], &lout[0]);
-    kiss_fft(fft_cfg, &rin[0], &rout[0]);
-
-    fill_bands(&lout, &display_buf[display_buf_idx][0]);
-    fill_bands(&rout, &display_buf[display_buf_idx][1]);
-
-    display_buf_idx = 1 - display_buf_idx;
-
-    /* wake up all client threads */
-    res = pthread_cond_broadcast(&display_cond);
-    if (res) {
-      log_error("cannot signal display condition: %s", strerror(res));
-      break;
-    }
-  }
-
-  res = pthread_mutex_unlock(&fft_mtx);
-  if (res)
-    log_error("cannot unlock fft mutex: %s", strerror(res));
-
-  return NULL;
+  return res;
 }
 
 static void create_helper_worker (void * (*start_routine)(void*), void *arg,
