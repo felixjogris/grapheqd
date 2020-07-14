@@ -68,6 +68,7 @@ static pthread_cond_t display_cond = PTHREAD_COND_INITIALIZER;
 static int display_idx = 0;
 static unsigned char display_buf[2][SAMPLING_CHANNELS][DISPLAY_BANDS];
 static int num_clients = 0;
+static pthread_mutex_t num_mtx = PTHREAD_MUTEX_INITIALIZER;
 
 /* used by main() and sigterm_handler() */
 static int running = 1;
@@ -341,13 +342,27 @@ static void fill_bands (float (*level)[FFT_SIZE / 2], float max_level,
   (*display)[26] = fill_band(level, max_level, 744, 1024); /* 16017.5 - 22050 */
 }
 
-static void * fft_worker (void *arg0)
+static float calculate_power (kiss_fft_cpx fft_out, float *max_level)
+{
+  float power = sqrt(fft_out.r * fft_out.r + fft_out.i * fft_out.i);
+
+  if (power > *max_level) {
+    *max_level = power;
+    log_info("max_level=%f", *max_level);
+  }
+
+  return power;
+}
+
+static void *fft_worker (void *arg0)
 {
   kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
   int res, i, new_pcm_idx;
   kiss_fft_cpx lin[FFT_SIZE], rin[FFT_SIZE];
   kiss_fft_cpx lout[FFT_SIZE], rout[FFT_SIZE];
   float llevel[FFT_SIZE / 2], rlevel[FFT_SIZE / 2];
+  /* kiss_fft emits 131072 when fed with a pure sine, so it's a good starting
+     point */
   static float max_level = 131072.;
 
   pthread_setname_np(pthread_self(), "grapheqd:fft");
@@ -382,16 +397,8 @@ static void * fft_worker (void *arg0)
     kiss_fft(fft_cfg, &rin[0], &rout[0]);
 
     for (i = 0; i < FFT_SIZE / 2; i++) {
-      llevel[i] = sqrt(lout[i].r * lout[i].r + lout[i].i * lout[i].i);
-      rlevel[i] = sqrt(rout[i].r * rout[i].r + rout[i].i * rout[i].i);
-      if (llevel[i] > max_level) {
-        max_level = llevel[i];
-        log_info("max_level=%f", max_level);
-      }
-      if (rlevel[i] > max_level) {
-        max_level = rlevel[i];
-        log_info("max_level=%f", max_level);
-      }
+      llevel[i] = calculate_power(lout[i], &max_level);
+      rlevel[i] = calculate_power(rout[i], &max_level);
     }
 
     fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
@@ -414,11 +421,46 @@ static void * fft_worker (void *arg0)
   return NULL;
 }
 
-static void * pcm_worker (void *arg0)
+static int pcm_worker_loop (snd_pcm_t *soundhandle)
+{
+  int res;
+  snd_pcm_sframes_t num_frames;
+
+  while (num_clients > 0) {
+    num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
+
+    if (num_frames < 0) {
+      snd_pcm_prepare(soundhandle);
+      num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
+    }
+
+    if (num_frames < 0) {
+      log_error("cannot read pcm data: %s", snd_strerror(num_frames));
+      return -1;
+    }
+
+    if (num_frames != FFT_SIZE) {
+      log_error("read %li bytes of pcm data instead of %i", num_frames,
+                FFT_SIZE);
+    }
+
+    pcm_idx = 1 - pcm_idx;
+
+    /* wake up fft thread */
+    res = pthread_cond_signal(&fft_cond);
+    if (res) {
+      log_error("cannot signal fft condition: %s", strerror(res));
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+static void *pcm_worker (void *arg0)
 {
   snd_pcm_t *soundhandle = (snd_pcm_t*) arg0;
   int res;
-  snd_pcm_sframes_t num_frames;
 
   pthread_setname_np(pthread_self(), "grapheqd:pcm");
 
@@ -436,36 +478,10 @@ static void * pcm_worker (void *arg0)
       break;
     }
 
-    while (num_clients > 0) {
-      num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
-
-      if (num_frames < 0) {
-        snd_pcm_prepare(soundhandle);
-        num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
-      }
-
-      if (num_frames < 0) {
-        log_error("cannot read pcm data: %s", snd_strerror(num_frames));
-        goto ERROR;
-      }
-
-      if (num_frames != FFT_SIZE) {
-        log_error("read %li bytes of pcm data instead of %i", num_frames,
-                  FFT_SIZE);
-      }
-
-      pcm_idx = 1 - pcm_idx;
-
-      /* wake up fft thread */
-      res = pthread_cond_signal(&fft_cond);
-      if (res) {
-        log_error("cannot signal fft condition: %s", strerror(res));
-        goto ERROR;
-      }
-    }
+    if (pcm_worker_loop(soundhandle))
+      break;
   }
 
-ERROR:
   res = pthread_mutex_unlock(&pcm_mtx);
   if (res)
     log_error("cannot unlock pcm mutex: %s", strerror(res));
@@ -473,16 +489,97 @@ ERROR:
   return NULL;
 }
 
-static void * client_worker (void *arg0)
+static int count_client (int i)
+{
+  int res;
+
+  res = pthread_mutex_lock(&num_mtx);
+  if (res) {
+    log_error("cannot lock num_clients mutex: %s", strerror(res));
+    return res;
+  }
+
+  num_clients += i;
+
+  res = pthread_mutex_unlock(&num_mtx);
+  if (res)
+    log_error("cannot unlock num_clients mutex: %s", strerror(res));
+
+  return res;
+}
+
+static void start_display(struct client_worker *arg, void (*display_func)())
+{
+}
+
+static int send_http (struct client_worker *arg)
+{
+  int res;
+}
+
+static int read_http (struct client_worker *arg)
+{
+  char buf[8192];
+  int idx = 0, res;
+const char const *rootpage = "root page";
+const char const *favicon = "favicon";
+  const char const *websocket_header = "Upgrade: websocket\r\n"
+                                       "Connection: Upgrade\r\n";
+
+  while (idx < sizeof(buf)) {
+    res = read(arg->socket, &buf[idx], sizeof(buf) - idx);
+    if (res <= 0)
+      break;
+
+    if (buf[0] == 'm') {
+      start_display(arg, &mono_display);
+      return 1;
+    }
+
+    if (buf[0] == 'c') {
+      start_display(arg, &color_display);
+      return 1;
+    }
+
+    idx += res;
+
+    if (strncmp(buf, "\r\n\r\n", idx))
+      continue;
+
+    if (!strncasecmp(buf, "GET / ", idx))
+      return send_http(arg, 200, "text/html", NULL, rootpage);
+
+    if (!strncasecmp(buf, "GET /favicon.ico ", idx))
+      return send_http(arg, 200, "image/x-icon", NULL, favicon);
+
+    if (!strncasecmp(buf, "GET /json ", idx) &&
+        !strncasecmp(buf, "\r\nConnection: Upgrade\r\n", idx) &&
+        !strncasecmp(buf, "\r\nUpgrade: websocket\r\n", idx)) {
+      if (!send_http(arg, 101, NULL, websocket_header, NULL))
+        start_display(arg, &json_display);
+      return 1;
+    }
+
+    return send_http(arg, 404, "text/plain", NULL, "Not found.");
+  }
+
+  return send_http(arg, 400, "text/plain", NULL, "Bad request.");
+}
+
+static void *client_worker (void *arg0)
 {
   struct client_worker_arg *arg = arg0;
-  int res;
+  int res = 0;
   int new_display_idx;
-char buf[1024];
+  char buf[8192], buf_idx;
 
   pthread_setname_np(pthread_self(), "grapheqd:client");
   client_address(arg);
-  ++num_clients;
+  count_client(1);
+
+  while (res == 0) {
+    res = read_http(arg->socket);
+  }
 
 // TODO: http
   while ((res = read(arg->socket, buf, 1024)) > 0) {
@@ -537,7 +634,7 @@ if (res) break;
     }
   }
 
-  --num_clients;
+  count_client(-1);
   close(arg->socket);
 // TODO: http log line somewhere
 
@@ -595,7 +692,7 @@ static int wait_for_client (int listen_socket)
   return res;
 }
 
-static void create_helper_worker (void * (*start_routine)(void*), void *arg,
+static void create_helper_worker (void *(*start_routine)(void*), void *arg,
                                   char *name)
 {
   int res;
@@ -685,7 +782,7 @@ int main (int argc, char **argv)
   while (running) {
     res = wait_for_client(listen_socket);
     if (res < 0)
-      running =0;
+      running = 0;
     if (res > 0)
       if (create_client_worker(listen_socket))
         running = 0;
