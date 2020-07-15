@@ -520,12 +520,27 @@ static int count_client (int i)
 
 static int json_display (int new_display_idx, char buf[32768])
 {
+// TODO
   return 0;
 }
 
 static void set_color (char c, char intens, char *p)
 {
-  sprintf(p, "%c[%c;36;40m%c%c[0m", 27, intens, c, 27);
+  *p++ = 27;
+  *p++ = '[';
+  *p++ = intens;
+  *p++ = ';';
+  *p++ = '3';
+  *p++ = '6';
+  *p++ = ';';
+  *p++ = '4';
+  *p++ = '0';
+  *p++ = 'm';
+  *p++ = c;
+  *p++ = 27;
+  *p++ = '[';
+  *p++ = '0';
+  *p++ = 'm';
 }
 
 static int color_display (int new_display_idx, char buf[32768])
@@ -588,7 +603,7 @@ static void start_display (struct client_worker_arg *arg,
       log_error("cannot signal pcm condition: %s", strerror(res));
       return;
     }
-// TODO: increase mutex
+
     res = pthread_mutex_lock(&display_mtx);
     if (res) {
       log_error("cannot lock display mutex: %s", strerror(res));
@@ -639,14 +654,16 @@ static int send_http (struct client_worker_arg *arg, const char *url,
                       int code, int connection_close,
                       const char *header_and_content)
 {
-  char buf[sizeof("HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n\0")];
+  char buf[sizeof("HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n"
+                  "Server: grapheqd/version 123\r\n\0")];
   int res;
 
   log_http(arg, url, code);
 
   snprintf(buf, sizeof(buf),
            "HTTP/1.1 %i %s\r\n"
-           "%s",
+           "%s"
+           "Server: grapheqd/version " GRAPHEQD_VERSION "\r\n",
            code, http_reason(code),
            (connection_close ? "Connection: close\r\n" : ""));
 
@@ -671,11 +688,8 @@ static int read_http (struct client_worker_arg *arg)
   char buf[8192], *p;
   unsigned int idx = 0;
   int res, connection_close = 0;
-/* TODO */
-const char * const rootpage = "Content-Type: text/html\r\n"
-                              "Content-Length: 5\r\n\r\nhello";
-const char * const favicon = "Content-Type: image/x-icon\r\n"
-                             "Content-Length: 0\r\n\r\n";
+#include "rootpage.h"
+#include "favicon.h"
   const char * const websocket_header = "Upgrade: websocket\r\n"
                                         "Connection: Upgrade\r\n";
 
