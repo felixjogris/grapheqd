@@ -29,10 +29,10 @@ my $hfile = "$var_name.h";
 open($fh, ">", $hfile) || die "$hfile: $!";
 binmode($fh) || die "$hfile: binmode(): $!";
 
-print $fh "const char $var_name\[\] = { ";
+print $fh "char $var_name\[\] = { ";
 while ($data =~ s/^(.)//ms) {
   print $fh sprintf("0x%02hx,", ord($1));
 }
-print $fh "0x00 };\n";
+print $fh " };\n";
 
 close($fh);

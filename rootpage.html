@@ -1,5 +1,15 @@
 <html>
+<head>
+<title>grapheqd</title>
+<script>
+var host = window.location.host;
+var ws = new WebSocket("ws://" + host + "/json");
+ws.onmessage = function (ev) {
+  document.getElementById("foo").value = ev.data;
+};
+</script>
+</head>
 <body>
-hello
+<textarea id="foo" cols="100" rows="30"></textarea>
 </body>
 </html>

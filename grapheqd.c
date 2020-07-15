@@ -18,7 +18,9 @@
 #include <pwd.h>
 #include <grp.h>
 #include <pthread.h>
+#include <sys/uio.h>
 #include <alsa/asoundlib.h>
+#include <openssl/sha.h>
 #include "kiss_fft.h"
 #ifdef USE_SYSTEMD
 #  include <systemd/sd-daemon.h>
@@ -526,10 +528,10 @@ static int count_client (int i)
   return res;
 }
 
-static char *str2buf (char *buf, const char * const str)
+static char *str2buf (char *buf, const char * const str, size_t l)
 {
-  memcpy(buf, str, strlen(str));
-  return buf + strlen(str);
+  memcpy(buf, str, l - 1);
+  return buf + l - 1;
 }
 
 static void int2buf (char *buf, int i, int len)
@@ -550,13 +552,14 @@ static char *json_display (int new_display_idx, char *buf)
 {
   char *p = buf;
   int col;
-  const char * const json = "{\"rate\":44100,\"channels\":2,\n"
-                            "\"left\":[25,25,25,25,25,25,25,25,25,25,25,25,"
-                            "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25],\n"
-                            "\"right\":[25,25,25,25,25,25,25,25,25,25,25,25,"
-                            "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25]}\n";
+  const char ws_json[] = "\x81\x7e\x0\xd3"
+                         "{\"rate\":44100,\"channels\":2,\n"
+                         "\"left\":[25,25,25,25,25,25,25,25,25,25,25,25,"
+                         "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25],\n"
+                         "\"right\":[25,25,25,25,25,25,25,25,25,25,25,25,"
+                         "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25]}\n";
 
-  p = str2buf(p, json);
+  p = str2buf(p, ws_json, sizeof(ws_json));
 
   int2buf(p - 199, sampling_rate, 5);
   int2buf(p - 186, sampling_channels, 1);
@@ -573,10 +576,10 @@ static char *green_on_black (char bright, char *buf)
 {
   char *p = buf;
   static char old_bright = -1;
-  const char * const esc_seq = "\x1b[0m\x1b[ ;36;40m";
+  const char esc_seq[] = "\x1b[0m\x1b[ ;36;40m";
 
   if (old_bright != bright) {
-    p = str2buf(p, esc_seq);
+    p = str2buf(p, esc_seq, sizeof(esc_seq));
     *(p - 8) = (bright ? '1' : '2');
     old_bright = bright;
   }
@@ -588,10 +591,10 @@ static char *color_display (int new_display_idx, char *buf)
 {
   char *p = buf;
   int row, col;
-  const char * const status_line = "\n    \x1b[0m\x1b[ ;36;40mMono      "
-                                   "\x1b[0m\x1b[ ;36;40mStereo         "
-                                   "\x1b[0m\x1b[ ;36;40m44100 Hz      "
-                                   "\x1b[0m\x1b[ ;36;40m48000 Hz    ";
+  const char status_line[] = "\n    \x1b[0m\x1b[ ;36;40mMono      "
+                             "\x1b[0m\x1b[ ;36;40mStereo         "
+                             "\x1b[0m\x1b[ ;36;40m44100 Hz      "
+                             "\x1b[0m\x1b[ ;36;40m48000 Hz    ";
 
   for (row = DISPLAY_BARS; row > 0; row--) {
     *p++ = '\n';
@@ -612,7 +615,7 @@ static char *color_display (int new_display_idx, char *buf)
     }
   }
 
-  p = str2buf(p, status_line);
+  p = str2buf(p, status_line, sizeof(status_line));
   *(p - 101) = (sampling_channels == 2 ? '2' : '1');
   *(p - 77) = (sampling_channels == 2 ? '1' : '2');
   *(p - 48) = (sampling_rate == 44100 ? '1' : '2');
@@ -625,8 +628,8 @@ static char *mono_display (int new_display_idx, char *buf)
 {
   char *p = buf;
   int row, col;
-  const char * const status_line = "\n  [ ] Mono  [ ] Stereo     "
-                                   "[ ] 44100 Hz  [ ] 48000 Hz  ";
+  const char status_line[] = "\n  [ ] Mono  [ ] Stereo     "
+                             "[ ] 44100 Hz  [ ] 48000 Hz  ";
 
   for (row = DISPLAY_BARS; row > 0; row--) {
     *p++ = '\n';
@@ -641,9 +644,9 @@ static char *mono_display (int new_display_idx, char *buf)
     p += 2 * DISPLAY_BANDS + 1;
   }
 
-  p = str2buf(p, status_line);
+  p = str2buf(p, status_line, sizeof(status_line));
   *(p - 52) = (sampling_channels == 2 ? ' ' : 'X');
-  *(p - 42) = (sampling_channels == 2 ? ' ' : 'X');
+  *(p - 42) = (sampling_channels == 2 ? 'X' : ' ');
   *(p - 27) = (sampling_rate == 44100 ? 'X' : ' ');
   *(p - 13) = (sampling_rate == 44100 ? ' ' : 'X');
 
@@ -702,39 +705,66 @@ static void log_http (struct client_worker_arg *arg, const char *url,
   log_info("%s \"%s\" %i", arg->clientname, url, code);
 }
 
-static char *http_reason (int code)
-{
-  switch (code) {
-    case 101: return "Switching Protocols";
-    case 200: return "OK";
-    case 400: return "Bad Request";
-    case 404: return "Not Found";
-    default:  return "Internal Server Error";
-  }
-}
-
 static int send_http (struct client_worker_arg *arg, const char *url,
                       int code, int connection_close,
-                      const char *header_and_content)
+                      char *header_and_content, size_t header_content_size)
 {
-  char buf[128];
-  int res;
+  const char status_line[] = "HTTP/1.1 200 ";
+  char server_line[] = "\r\nServer: grapheqd/version " GRAPHEQD_VERSION
+                             "\r\n";
+  char connection_line[] = "Connection: close\r\n";
+  char buf[16], *p;
+  int res, idx;
+  struct iovec iov[5];
+  ssize_t len;
 
   log_http(arg, url, code);
 
-  snprintf(buf, sizeof(buf),
-           "HTTP/1.1 %i %s\r\n"
-           "%s"
-           "Server: grapheqd/version " GRAPHEQD_VERSION "\r\n",
-           code, http_reason(code),
-           (connection_close ? "Connection: close\r\n" : ""));
+  p = str2buf(buf, status_line, sizeof(status_line));
+  int2buf(p - 2, code, 3);
+  iov[0].iov_base = buf;
+  iov[0].iov_len = sizeof(status_line) - 1;
+  len = sizeof(status_line) - 1;
 
-  res = write(arg->socket, buf, strlen(buf));
-  if ((res < 0) || (res != (signed) strlen(buf)))
-    return -1;
+  switch (code) {
+    case 101:
+      iov[1].iov_base = "Switching Protocols";
+      break;
+    case 200:
+      iov[1].iov_base = "OK";
+      break;
+    case 400:
+      iov[1].iov_base = "Bad Request";
+      break;
+    case 404:
+      iov[1].iov_base = "Not Found";
+      break;
+    default:
+      iov[1].iov_base = "Internal Server Error";
+      break;
+  }
+  iov[1].iov_len = strlen(iov[1].iov_base);
+  len += strlen(iov[1].iov_base);
 
-  res = write(arg->socket, header_and_content, strlen(header_and_content));
-  if ((res < 0) || (res != (signed) strlen(header_and_content)))
+  iov[2].iov_base = server_line;
+  iov[2].iov_len = sizeof(server_line) - 1;
+  len += sizeof(server_line) - 1;
+
+  if (connection_close) {
+    iov[3].iov_base = connection_line;
+    iov[3].iov_len = sizeof(connection_line) - 1;
+    len += sizeof(connection_line) - 1;
+    idx = 4;
+  } else {
+    idx = 3;
+  }
+
+  iov[idx].iov_base = header_and_content;
+  iov[idx++].iov_len = header_content_size;
+  len += header_content_size;
+
+  res = writev(arg->socket, iov, idx);
+  if ((res < 0) || (res != len))
     return -1;
 
   if (connection_close) {
@@ -745,20 +775,120 @@ static int send_http (struct client_worker_arg *arg, const char *url,
   return 0;
 }
 
+/* encode len bytes from src to dst */
+static void base64 (char *dst, unsigned char *src, int len)
+{
+  const char tbl[65] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                       "abcdefghijklmnopqrstuvwxyz0123456789+/";
+  int i, j;
+
+  for (i = 0, j = 0; i < len; ++i) {
+    *(dst + j++) = tbl[(*(src + i) >> 2) & 63];
+    *(dst + j++) = tbl[((*(src + i) << 4) + (*(src + i + 1) >> 4)) & 63];
+    if (++i == len) break;
+    *(dst + j++) = tbl[((*(src + i) << 2) + (*(src + i + 1) >> 6)) & 63];
+    if (++i == len) break;
+    *(dst + j++) = tbl[*(src + i) & 63];
+  }
+
+  while ((j % 4)) *(dst + j++) = '=';
+}
+
+static void start_websocket(struct client_worker_arg *arg, char *url,
+                           char *ws_key, char * (*display_func)(int, char *))
+{
+  const char ws_uuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+  const char websocket_header[] = "Upgrade: websocket\r\n"
+                                  "Sec-WebSocket-Accept: "
+                                            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
+                                  "Connection: Upgrade\r\n\r\n";
+  char buf[sizeof(websocket_header)];
+  unsigned char sha_md[SHA_DIGEST_LENGTH];
+  SHA_CTX sha_ctx;
+  char *line_end = strchr(ws_key, '\r');
+
+  if (!line_end)
+    /* cant happen, has_header() checks for end of line as well */
+    return;
+  if (!SHA1_Init(&sha_ctx))
+    return;
+  if (!SHA1_Update(&sha_ctx, ws_key, line_end - ws_key))
+    return;
+  if (!SHA1_Update(&sha_ctx, ws_uuid, sizeof(ws_uuid) - 1))
+    return;
+  if (!SHA1_Final(sha_md, &sha_ctx))
+    return;
+
+  str2buf(buf, websocket_header, sizeof(websocket_header));
+  base64(buf + 42, sha_md, sizeof(sha_md));
+
+  if (!send_http(arg, url, 101, 0, buf, sizeof(websocket_header) - 1))
+    start_display(arg, display_func);
+}
+
+static char *has_header (char *buf, char *name, char *value)
+{
+  char *p = buf, *line_end, *found;
+
+  while (*p) {
+    /* search header name in http header */
+    p = strcasestr(p, name);
+    if (!p)
+      return NULL;
+
+    if ((p == buf) || (*(p - 1) != '\n')) {
+      p += strlen(name);
+      continue;
+    }
+
+    p += strlen(name); /* p is now on the colon or '\0' */
+    if ((*p == ':') && (*(p + 1) == ' '))
+      break;
+  }
+
+  if (!p || !*p)
+    return NULL;
+
+  p += 2;
+  /* p is now on first value of header option, or \r or \0 */
+
+  line_end = strchr(p, '\r');
+  if (!line_end || (p == line_end))
+    return NULL;
+
+  /* not interested in particular value of this header option, just return
+     pointer to beginning of values */
+  if (!value)
+    return p;
+
+  /* XXX check for separate values */
+  found = strcasestr(p, value);
+  if (!found || (found >= line_end))
+    return NULL;
+
+  return found;
+}
+
 static int read_http (struct client_worker_arg *arg)
 {
-  char buf[8192], *p;
+  char buf[8192], *p, *ws_key;
   unsigned int idx = 0;
   int res, connection_close = 0;
 #include "rootpage.h"
 #include "favicon.h"
-  const char * const websocket_header = "Upgrade: websocket\r\n"
-                                        "Connection: Upgrade\r\n";
+  char not_found[] = "Content-Type: text/plain\r\n"
+                     "Content-Length: 12\r\n"
+                     "\r\n"
+                     "Not found.\r\n";
+  char bad_request[] = "Content-Type: text/plain\r\n"
+                       "Content-Length: 14\r\n"
+                       "\r\n"
+                       "Bad Request.\r\n";
 
   while (idx < sizeof(buf) - 1) {
     res = read(arg->socket, &buf[idx], sizeof(buf) - idx - 1);
     if (res <= 0)
-      break;
+      return -1;
 
     if (buf[0] == 'm') {
       log_http(arg, "m", 200);
@@ -783,34 +913,30 @@ static int read_http (struct client_worker_arg *arg)
     connection_close = (strcasestr(buf, "\r\nConnection: close\r\n") != NULL);
 
     if (!strncasecmp(buf, "GET / ", strlen("GET / ")))
-      return send_http(arg, "/", 200, connection_close, rootpage);
+      return send_http(arg, "/", 200, connection_close, rootpage,
+                       sizeof(rootpage));
 
     if (!strncasecmp(buf, "GET /favicon.ico ", strlen("GET /favicon.ico ")))
-      return send_http(arg, "/favicon.ico", 200, connection_close, favicon);
+      return send_http(arg, "/favicon.ico", 200, connection_close, favicon,
+                       sizeof(favicon));
 
     if (!strncasecmp(buf, "GET /json ", strlen("GET /json ")) &&
-        strcasestr(buf, "\r\nConnection: Upgrade\r\n") &&
-        strcasestr(buf, "\r\nUpgrade: websocket\r\n")) {
-      if (!send_http(arg, "/json", 101, 0, websocket_header))
-        start_display(arg, &json_display);
+        has_header(buf, "Connection", "Upgrade") &&
+        has_header(buf, "Upgrade", "websocket") &&
+        ((ws_key = has_header(buf, "Sec-WebSocket-Key", NULL)) != NULL)) {
+      start_websocket(arg, "/json", ws_key, &json_display);
       return 1;
     }
 
     p = strchr(buf, '\r');
     *p = '\0';
 
-    return send_http(arg, buf, 404, connection_close,
-                     "Content-Type: text/plain\r\n"
-                     "Content-Length: 12\r\n"
-                     "\r\n"
-                     "Not found.\r\n");
+    return send_http(arg, buf, 404, connection_close, not_found,
+                     sizeof(not_found) - 1);
   }
 
-  return send_http(arg, "", 400, connection_close,
-                   "Content-Type: text/plain\r\n"
-                   "Content-Length: 14\r\n"
-                   "\r\n"
-                   "Bad Request.\r\n");
+  return send_http(arg, "", 400, connection_close, bad_request,
+                   sizeof(bad_request) - 1);
 }
 
 static void *client_worker (void *arg0)
