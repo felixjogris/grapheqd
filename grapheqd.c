@@ -33,7 +33,7 @@
                                               and every use of int16_t */
 #define DISPLAY_BANDS 27 /* 27 bands/buckets per channel displayed */
 #define DISPLAY_BARS 25  /* 25 segments per band */
-#define FFT_SIZE 2048
+#define FFT_SIZE 4096    /* must be power of 2 */
 
 #define log_error(fmt, params ...) do { \
   if (foreground) warnx(fmt "\n", ## params); \
@@ -246,11 +246,13 @@ static snd_pcm_t *open_alsa (const char *soundcard)
     errx(1, "%s: %s", "snd_pcm_hw_params_set_format("
                       STR(SAMPLING_WIDTH*2) ")", snd_strerror(err));
 
+/* FIXME */
   err = snd_pcm_hw_params_set_channels(handle, params, SAMPLING_CHANNELS);
   if (err)
 warnx("%s: %s", "snd_pcm_hw_params_set_channels("
                       STR(SAMPLING_CHANNELS) ")", snd_strerror(err));
 
+/* FIXME */
   err = snd_pcm_hw_params_set_rate(handle, params, SAMPLING_RATE, 0);
   if (err)
 warnx( "%s: %s", "snd_pcm_hw_params_set_rate(" STR(SAMPLING_RATE) ")",
@@ -312,44 +314,68 @@ static char fill_band (float (*level)[FFT_SIZE / 2], float max_level,
 static void fill_bands (float (*level)[FFT_SIZE / 2], float max_level,
                         unsigned char (*display)[DISPLAY_BANDS])
 {
-  (*display)[0] = fill_band(level, max_level,  0,  1); /* 21.5 Hz */
-  (*display)[1] = fill_band(level, max_level,  1,  2); /* 43 */ 
-  (*display)[2] = fill_band(level, max_level,  2,  3); /* 64.5 */
-  (*display)[3] = fill_band(level, max_level,  3,  4); /* 86 */
-  (*display)[4] = fill_band(level, max_level,  4,  5); /* 107.5 */
+  /* base values for 2048 fft size at 44100 Hz */
+  const int c = FFT_SIZE / 2048;
 
-  (*display)[5] = fill_band(level, max_level,  5,  7);  /* 129 - 150.5 */
-  (*display)[6] = fill_band(level, max_level,  7,  9);  /* 172 - 193.5 */
-  (*display)[7] = fill_band(level, max_level,  9,  11); /* 215 - 236.5 */
-
-  (*display)[8] = fill_band(level, max_level,  11, 14); /* 258 - 301 */
-  (*display)[9] = fill_band(level, max_level,  15, 18); /* 322.5 - 387 */
-
-  (*display)[10] = fill_band(level, max_level, 18, 23); /* 408.5 - 494.5 */
-  (*display)[11] = fill_band(level, max_level, 23, 28); /* 473 - 602 */
-
-  (*display)[12] = fill_band(level, max_level, 28, 37); /* 623.5 - 795.5*/
-  (*display)[13] = fill_band(level, max_level, 37, 46); /* 817 - 989 */
-
-  (*display)[14] = fill_band(level, max_level, 46, 57); /* 1010.5 - 1225.5 */
-  (*display)[15] = fill_band(level, max_level, 57, 69); /* 1247 - 1483.5 */
-
-  (*display)[16] = fill_band(level, max_level, 69, 92);  /* 1505 - 1978 */
-  (*display)[17] = fill_band(level, max_level, 92, 115); /* 1999.5 - 2472.5 */
-
-  (*display)[18] = fill_band(level, max_level, 115, 148); /* 2494 - 3182 */
-  (*display)[19] = fill_band(level, max_level, 148, 181); /* 3203.5 - 3891.5 */
-
-  (*display)[20] = fill_band(level, max_level, 181, 236); /* 3913 - 5075 */
-  (*display)[21] = fill_band(level, max_level, 236, 292); /* 5095.5 - 6278 */
-
-  (*display)[22] = fill_band(level, max_level, 292, 378); /* 6299.5 - 8127 */
-  (*display)[23] = fill_band(level, max_level, 378, 464); /* 8148.5 - 9976 */
-
-  (*display)[24] = fill_band(level, max_level, 464, 604); /* 9997.5 - 12986 */
-  (*display)[25] = fill_band(level, max_level, 604, 744); /* 13007.5 - 15996 */
-
-  (*display)[26] = fill_band(level, max_level, 744, 1024); /* 16017.5 - 22050 */
+#if SAMPLING_RATE==44100
+  /* 21.5 Hz */
+  (*display)[0] = fill_band(level, max_level,  c*0,  c*1);
+  /* 43 */
+  (*display)[1] = fill_band(level, max_level,  c*1,  c*2);
+  /* 64.5 */
+  (*display)[2] = fill_band(level, max_level,  c*2,  c*3);
+  /* 86 */
+  (*display)[3] = fill_band(level, max_level,  c*3,  c*4);
+  /* 107.5 */
+  (*display)[4] = fill_band(level, max_level,  c*4,  c*5);
+  /* 129 - 150.5 */
+  (*display)[5] = fill_band(level, max_level,  c*5,  c*7);
+  /* 172 - 193.5 */
+  (*display)[6] = fill_band(level, max_level,  c*7,  c*9);
+  /* 215 - 236.5 */
+  (*display)[7] = fill_band(level, max_level,  c*9,  c*11);
+  /* 258 - 301 */
+  (*display)[8] = fill_band(level, max_level,  c*11, c*14);
+  /* 322.5 - 387 */
+  (*display)[9] = fill_band(level, max_level,  c*15, c*18);
+  /* 408.5 - 494.5 */
+  (*display)[10] = fill_band(level, max_level, c*18, c*23);
+  /* 473 - 602 */
+  (*display)[11] = fill_band(level, max_level, c*23, c*28);
+  /* 623.5 - 795.5*/
+  (*display)[12] = fill_band(level, max_level, c*28, c*37);
+  /* 817 - 989 */
+  (*display)[13] = fill_band(level, max_level, c*37, c*46);
+  /* 1010.5 - 1225.5 */
+  (*display)[14] = fill_band(level, max_level, c*46, c*57);
+  /* 1247 - 1483.5 */
+  (*display)[15] = fill_band(level, max_level, c*57, c*69);
+  /* 1505 - 1978 */
+  (*display)[16] = fill_band(level, max_level, c*69, c*92);
+  /* 1999.5 - 2472.5 */
+  (*display)[17] = fill_band(level, max_level, c*92, c*115);
+  /* 2494 - 3182 */
+  (*display)[18] = fill_band(level, max_level, c*115, c*148);
+  /* 3203.5 - 3891.5 */
+  (*display)[19] = fill_band(level, max_level, c*148, c*181);
+  /* 3913 - 5075 */
+  (*display)[20] = fill_band(level, max_level, c*181, c*236);
+  /* 5095.5 - 6278 */
+  (*display)[21] = fill_band(level, max_level, c*236, c*292);
+  /* 6299.5 - 8127 */
+  (*display)[22] = fill_band(level, max_level, c*292, c*378);
+  /* 8148.5 - 9976 */
+  (*display)[23] = fill_band(level, max_level, c*378, c*464);
+  /* 9997.5 - 12986 */
+  (*display)[24] = fill_band(level, max_level, c*464, c*604);
+  /* 13007.5 - 15996 */
+  (*display)[25] = fill_band(level, max_level, c*604, c*744);
+  /* 16017.5 - 22050 */
+  (*display)[26] = fill_band(level, max_level, c*744, c*1024);
+#elif SAMPLING_RATE==48000
+#else
+#  error Unknown SAMPLING_RATE
+#endif
 }
 
 static float calculate_power (kiss_fft_cpx fft_out, float *max_level)
@@ -440,6 +466,7 @@ static int pcm_worker_loop (snd_pcm_t *soundhandle)
     num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
 
     if (num_frames < 0) {
+      /* retry */
       snd_pcm_prepare(soundhandle);
       num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
     }
@@ -543,7 +570,7 @@ static void set_color (char c, char intens, char *p)
   *p++ = 'm';
 }
 
-static int color_display (int new_display_idx, char buf[32768])
+static int color_display (int new_display_idx, char buf[21504])
 {
   int row, col, idx = 0;
 
@@ -552,24 +579,24 @@ static int color_display (int new_display_idx, char buf[32768])
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
       if (display_buf[new_display_idx][0][col] >= row)
-        set_color('=', '1', &buf[idx + 15 * col]);
+        set_color('=', '1', &buf[idx + col * 15]);
       else
-        set_color('=', '2', &buf[idx + 15 * col]);
+        set_color('=', '2', &buf[idx + col * 15]);
 
       if (display_buf[new_display_idx][1][col] >= row)
-        set_color('=', '1', &buf[idx + 15 * col + 1 + DISPLAY_BANDS * 15]);
+        set_color('=', '1', &buf[idx + DISPLAY_BANDS * 15 + 15 + col * 15]);
       else
-        set_color('=', '2', &buf[idx + 15 * col + 1 + DISPLAY_BANDS * 15]);
+        set_color('=', '2', &buf[idx + DISPLAY_BANDS * 15 + 15 + col * 15]);
     }
 
-    buf[idx + DISPLAY_BANDS * 15] = ' ';
-    idx += 2 * DISPLAY_BANDS * 15 + 1;
+    set_color(' ', '2', &buf[idx + DISPLAY_BANDS * 15]);
+    idx += 2 * DISPLAY_BANDS * 15 + 15;
   }
 
   return idx;
 }
 
-static int mono_display (int new_display_idx, char buf[32768])
+static int mono_display (int new_display_idx, char buf[21504])
 {
   int row, col, idx = 0;
 
@@ -591,9 +618,12 @@ static int mono_display (int new_display_idx, char buf[32768])
 }
 
 static void start_display (struct client_worker_arg *arg,
-                           int (*display_func)(int, char[32768]))
+                           int (*display_func)(int, char[21504]))
 {
-  char buf[32768];
+  /* color_display needs:
+     25 bars * ((27 bands * 2 channels + space) * 15 chars + newline) = 20650
+   */
+  char buf[21504];
   int res, new_display_idx;
 
   while (1) {
@@ -700,12 +730,14 @@ static int read_http (struct client_worker_arg *arg)
 
     if (buf[0] == 'm') {
       log_http(arg, "m", 200);
+      pthread_setname_np(pthread_self(), "grapheqd:clientm");
       start_display(arg, &mono_display);
       return 1;
     }
 
     if (buf[0] == 'c') {
       log_http(arg, "c", 200);
+      pthread_setname_np(pthread_self(), "grapheqd:clientc");
       sprintf(buf, "%c]2;grapheqd%c\\", 27, 27);
       if (write(arg->socket, buf, strlen(buf)) == (signed) strlen(buf))
         start_display(arg, &color_display);
@@ -729,6 +761,7 @@ static int read_http (struct client_worker_arg *arg)
     if (!strncasecmp(buf, "GET /json ", strlen("GET /json ")) &&
         strcasestr(buf, "\r\nConnection: Upgrade\r\n") &&
         strcasestr(buf, "\r\nUpgrade: websocket\r\n")) {
+      pthread_setname_np(pthread_self(), "grapheqd:clientj");
       if (!send_http(arg, "/json", 101, 0, websocket_header))
         start_display(arg, &json_display);
       return 1;
