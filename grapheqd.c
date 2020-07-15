@@ -526,22 +526,45 @@ static int count_client (int i)
   return res;
 }
 
-static inline char *str2buf (char *buf, const char * const str)
+static char *str2buf (char *buf, const char * const str)
 {
   memcpy(buf, str, strlen(str));
   return buf + strlen(str);
 }
 
+static void int2buf (char *buf, int i, int len)
+{
+  char *p = buf, *start = buf - len;
+
+  while (p > start) {
+    *p-- = '0' + i % 10;
+    i /= 10;
+    if (i == 0)
+      break;
+  }
+  while (p > start)
+    *p-- = ' ';
+}
+
 static char *json_display (int new_display_idx, char *buf)
 {
   char *p = buf;
+  int col;
   const char * const json = "{\"rate\":44100,\"channels\":2,\n"
                             "\"left\":[25,25,25,25,25,25,25,25,25,25,25,25,"
                             "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25],\n"
                             "\"right\":[25,25,25,25,25,25,25,25,25,25,25,25,"
-                            "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25]}";
+                            "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25]}\n";
 
   p = str2buf(p, json);
+
+  int2buf(p - 199, sampling_rate, 5);
+  int2buf(p - 186, sampling_channels, 1);
+
+  for (col = 0; col < DISPLAY_BANDS; col++) {
+    int2buf(p - 174 + col * 3, display_buf[new_display_idx][0][col], 2);
+    int2buf(p - 82 + col * 3, display_buf[new_display_idx][1][col], 2);
+  }
 
   return p;
 }
@@ -694,8 +717,7 @@ static int send_http (struct client_worker_arg *arg, const char *url,
                       int code, int connection_close,
                       const char *header_and_content)
 {
-  char buf[sizeof("HTTP/1.1 500 Internal Server Error\r\nConnection: close\r\n"
-                  "Server: grapheqd/version 123\r\n\0")];
+  char buf[128];
   int res;
 
   log_http(arg, url, code);
