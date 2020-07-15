@@ -70,9 +70,8 @@ static unsigned char display_buf[2][MAX_CHANNELS][DISPLAY_BANDS];
 static int num_clients = 0;
 static pthread_mutex_t num_mtx = PTHREAD_MUTEX_INITIALIZER;
 /* set by alsa_open() */
-static void (*fill_bands) (float (*) [FFT_SIZE / 2], float,
-                           unsigned char (*) [DISPLAY_BANDS]);
-static int channels;
+static int sampling_rate;
+static int sampling_channels;
 
 /* used by main() and sigterm_handler() */
 static int running = 1;
@@ -259,70 +258,8 @@ static char fill_band (float (*level)[FFT_SIZE / 2], float max_level,
   return floor((DISPLAY_BARS * sum) / ((end - start) * max_level));
 }
 
-static void fill_bands48000 (float (*level)[FFT_SIZE / 2], float max_level,
-                             unsigned char (*display)[DISPLAY_BANDS])
-{
-  /* base values for 2048 fft size at 48000 Hz */
-  const int c = FFT_SIZE / 2048;
-// FIXME
-  /* 21.5 Hz */
-  (*display)[0] = fill_band(level, max_level,  c*0,  c*1);
-  /* 43 */
-  (*display)[1] = fill_band(level, max_level,  c*1,  c*2);
-  /* 64.5 */
-  (*display)[2] = fill_band(level, max_level,  c*2,  c*3);
-  /* 86 */
-  (*display)[3] = fill_band(level, max_level,  c*3,  c*4);
-  /* 107.5 */
-  (*display)[4] = fill_band(level, max_level,  c*4,  c*5);
-  /* 129 - 150.5 */
-  (*display)[5] = fill_band(level, max_level,  c*5,  c*7);
-  /* 172 - 193.5 */
-  (*display)[6] = fill_band(level, max_level,  c*7,  c*9);
-  /* 215 - 236.5 */
-  (*display)[7] = fill_band(level, max_level,  c*9,  c*11);
-  /* 258 - 301 */
-  (*display)[8] = fill_band(level, max_level,  c*11, c*14);
-  /* 322.5 - 387 */
-  (*display)[9] = fill_band(level, max_level,  c*15, c*18);
-  /* 408.5 - 494.5 */
-  (*display)[10] = fill_band(level, max_level, c*18, c*23);
-  /* 473 - 602 */
-  (*display)[11] = fill_band(level, max_level, c*23, c*28);
-  /* 623.5 - 795.5*/
-  (*display)[12] = fill_band(level, max_level, c*28, c*37);
-  /* 817 - 989 */
-  (*display)[13] = fill_band(level, max_level, c*37, c*46);
-  /* 1010.5 - 1225.5 */
-  (*display)[14] = fill_band(level, max_level, c*46, c*57);
-  /* 1247 - 1483.5 */
-  (*display)[15] = fill_band(level, max_level, c*57, c*69);
-  /* 1505 - 1978 */
-  (*display)[16] = fill_band(level, max_level, c*69, c*92);
-  /* 1999.5 - 2472.5 */
-  (*display)[17] = fill_band(level, max_level, c*92, c*115);
-  /* 2494 - 3182 */
-  (*display)[18] = fill_band(level, max_level, c*115, c*148);
-  /* 3203.5 - 3891.5 */
-  (*display)[19] = fill_band(level, max_level, c*148, c*181);
-  /* 3913 - 5075 */
-  (*display)[20] = fill_band(level, max_level, c*181, c*236);
-  /* 5095.5 - 6278 */
-  (*display)[21] = fill_band(level, max_level, c*236, c*292);
-  /* 6299.5 - 8127 */
-  (*display)[22] = fill_band(level, max_level, c*292, c*378);
-  /* 8148.5 - 9976 */
-  (*display)[23] = fill_band(level, max_level, c*378, c*464);
-  /* 9997.5 - 12986 */
-  (*display)[24] = fill_band(level, max_level, c*464, c*604);
-  /* 13007.5 - 15996 */
-  (*display)[25] = fill_band(level, max_level, c*604, c*744);
-  /* 16017.5 - 22050 */
-  (*display)[26] = fill_band(level, max_level, c*744, c*1024);
-}
-
-static void fill_bands44100 (float (*level)[FFT_SIZE / 2], float max_level,
-                             unsigned char (*display)[DISPLAY_BANDS])
+static void fill_bands (float (*level)[FFT_SIZE / 2], float max_level,
+                        unsigned char (*display)[DISPLAY_BANDS])
 {
   /* base values for 2048 fft size at 44100 Hz */
   const int c = FFT_SIZE / 2048;
@@ -479,7 +416,7 @@ static void *fft_worker (void *arg0)
       break;
     }
 
-    if (channels == 1)
+    if (sampling_channels == 1)
       fft_mono(fft_cfg);
     else
       fft_stereo(fft_cfg);
@@ -774,14 +711,12 @@ static int read_http (struct client_worker_arg *arg)
 
     if (buf[0] == 'm') {
       log_http(arg, "m", 200);
-      pthread_setname_np(pthread_self(), "grapheqd:clientm");
       start_display(arg, &mono_display);
       return 1;
     }
 
     if (buf[0] == 'c') {
       log_http(arg, "c", 200);
-      pthread_setname_np(pthread_self(), "grapheqd:clientc");
       sprintf(buf, "%c]2;grapheqd%c\\", 27, 27);
       if (write(arg->socket, buf, strlen(buf)) == (signed) strlen(buf))
         start_display(arg, &color_display);
@@ -805,7 +740,6 @@ static int read_http (struct client_worker_arg *arg)
     if (!strncasecmp(buf, "GET /json ", strlen("GET /json ")) &&
         strcasestr(buf, "\r\nConnection: Upgrade\r\n") &&
         strcasestr(buf, "\r\nUpgrade: websocket\r\n")) {
-      pthread_setname_np(pthread_self(), "grapheqd:clientj");
       if (!send_http(arg, "/json", 101, 0, websocket_header))
         start_display(arg, &json_display);
       return 1;
@@ -949,20 +883,20 @@ static snd_pcm_t *open_alsa (const char *soundcard)
     errx(1, "%s: %s", "snd_pcm_hw_params_set_format("
                       STR(SAMPLING_WIDTH*2) ")", snd_strerror(err));
 
-  channels = 2;
+  sampling_channels = 2;
   err = snd_pcm_hw_params_set_channels(handle, params, 2);
   if (err) {
-    channels = 1;
+    sampling_channels = 1;
     err = snd_pcm_hw_params_set_channels(handle, params, 1);
   }
   if (err)
     errx(1, "%s: %s", "snd_pcm_hw_params_set_channels(2 or 1)",
                       snd_strerror(err));
 
-  fill_bands = &fill_bands44100;
+  sampling_rate = 44100;
   err = snd_pcm_hw_params_set_rate(handle, params, 44100, 0);
   if (err) {
-    fill_bands = &fill_bands48000;
+    sampling_rate = 48000;
     err = snd_pcm_hw_params_set_rate(handle, params, 48000, 0);
   }
   if (err)
