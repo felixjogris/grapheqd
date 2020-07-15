@@ -557,48 +557,9 @@ static int set_intens (char intens, char buf[21504], int idx)
   return idx;
 }
 
-static int status_line (char buf[21504], int idx)
-{
-  int i;
-
-  buf[idx++] = '\n';
-  for (i = 0; i < 17; i++)
-    buf[idx++] = ' ';
-  buf[idx++] = '4';
-  if (sampling_rate == 48000) {
-    buf[idx++] = '8';
-    buf[idx++] = '0';
-  } else {
-    buf[idx++] = '4';
-    buf[idx++] = '1';
-  }
-  buf[idx++] = '0';
-  buf[idx++] = '0';
-  buf[idx++] = ' ';
-  buf[idx++] = 'H';
-  buf[idx++] = 'z';
-  buf[idx++] = ' ';
-  buf[idx++] = '/';
-  buf[idx++] = ' ';
-  buf[idx++] = (sampling_channels == 1 ? '1' : '2');
-  buf[idx++] = ' ';
-  buf[idx++] = 'C';
-  buf[idx++] = 'h';
-  buf[idx++] = 'a';
-  buf[idx++] = 'n';
-  buf[idx++] = 'n';
-  buf[idx++] = 'e';
-  buf[idx++] = 'l';
-  buf[idx++] = 's';
-  for (i = 0; i < 17; i++)
-    buf[idx++] = ' ';
-
-  return idx;
-}
-
 static int color_display (int new_display_idx, char buf[21504])
 {
-  int row, col, idx = 0;
+  int row, col, idx = 0, i;
 
   for (row = DISPLAY_BARS; row > 0; row--) {
     buf[idx++] = '\n';
@@ -620,7 +581,49 @@ static int color_display (int new_display_idx, char buf[21504])
   }
 
   idx = set_intens(0, buf, idx);
-  idx = status_line(buf, idx);
+
+  /* yuck */
+  buf[idx++] = '\n';
+  for (i = 0; i < 4; i++)
+    buf[idx++] = ' ';
+  idx = set_intens((sampling_channels != 2), buf, idx);
+  buf[idx++] = 'M';
+  buf[idx++] = 'o';
+  buf[idx++] = 'n';
+  buf[idx++] = 'o';
+  for (i = 0; i < 6; i++)
+    buf[idx++] = ' ';
+  idx = set_intens((sampling_channels == 2), buf, idx);
+  buf[idx++] = 'S';
+  buf[idx++] = 't';
+  buf[idx++] = 'e';
+  buf[idx++] = 'r';
+  buf[idx++] = 'e';
+  buf[idx++] = 'o';
+  for (i = 0; i < 9; i++)
+    buf[idx++] = ' ';
+  idx = set_intens((sampling_rate == 44100), buf, idx);
+  buf[idx++] = '4';
+  buf[idx++] = '4';
+  buf[idx++] = '1';
+  buf[idx++] = '0';
+  buf[idx++] = '0';
+  buf[idx++] = ' ';
+  buf[idx++] = 'H';
+  buf[idx++] = 'z';
+  for (i = 0; i < 6; i++)
+    buf[idx++] = ' ';
+  idx = set_intens((sampling_rate != 44100), buf, idx);
+  buf[idx++] = '4';
+  buf[idx++] = '8';
+  buf[idx++] = '0';
+  buf[idx++] = '0';
+  buf[idx++] = '0';
+  buf[idx++] = ' ';
+  buf[idx++] = 'H';
+  buf[idx++] = 'z';
+  for (i = 0; i < 4; i++)
+    buf[idx++] = ' ';
 
   return idx;
 }
@@ -643,7 +646,63 @@ static int mono_display (int new_display_idx, char buf[21504])
     idx += 2 * DISPLAY_BANDS + 1;
   }
 
-  idx = status_line(buf, idx);
+  /* yuck */
+  buf[idx++] = '\n';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
+  buf[idx++] = '[';
+  buf[idx++] = (sampling_channels == 2 ? ' ' : 'X');
+  buf[idx++] = ']';
+  buf[idx++] = ' ';
+  buf[idx++] = 'M';
+  buf[idx++] = 'o';
+  buf[idx++] = 'n';
+  buf[idx++] = 'o';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
+  buf[idx++] = '[';
+  buf[idx++] = (sampling_channels == 2 ? 'X' : ' ');
+  buf[idx++] = ']';
+  buf[idx++] = ' ';
+  buf[idx++] = 'S';
+  buf[idx++] = 't';
+  buf[idx++] = 'e';
+  buf[idx++] = 'r';
+  buf[idx++] = 'e';
+  buf[idx++] = 'o';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
+  buf[idx++] = '[';
+  buf[idx++] = (sampling_rate == 44100 ? 'X' : ' ');
+  buf[idx++] = ']';
+  buf[idx++] = ' ';
+  buf[idx++] = '4';
+  buf[idx++] = '4';
+  buf[idx++] = '1';
+  buf[idx++] = '0';
+  buf[idx++] = '0';
+  buf[idx++] = ' ';
+  buf[idx++] = 'H';
+  buf[idx++] = 'z';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
+  buf[idx++] = '[';
+  buf[idx++] = (sampling_rate == 44100 ? ' ' : 'X');
+  buf[idx++] = ']';
+  buf[idx++] = ' ';
+  buf[idx++] = '4';
+  buf[idx++] = '8';
+  buf[idx++] = '0';
+  buf[idx++] = '0';
+  buf[idx++] = '0';
+  buf[idx++] = ' ';
+  buf[idx++] = 'H';
+  buf[idx++] = 'z';
+  buf[idx++] = ' ';
+  buf[idx++] = ' ';
 
   return idx;
 }
