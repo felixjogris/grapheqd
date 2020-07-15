@@ -876,6 +876,7 @@ static int read_http (struct client_worker_arg *arg)
   int res, connection_close = 0;
 #include "rootpage.h"
 #include "favicon.h"
+  const char term_title[] = "\x1b]2;grapheqd\x1b\\";
   char not_found[] = "Content-Type: text/plain\r\n"
                      "Content-Length: 12\r\n"
                      "\r\n"
@@ -898,8 +899,8 @@ static int read_http (struct client_worker_arg *arg)
 
     if (buf[0] == 'c') {
       log_http(arg, "c", 200);
-      sprintf(buf, "%c]2;grapheqd%c\\", 27, 27);
-      if (write(arg->socket, buf, strlen(buf)) == (signed) strlen(buf))
+      res = write(arg->socket, term_title, sizeof(term_title - 1));
+      if (res == (signed) sizeof(term_title - 1))
         start_display(arg, &color_display);
       return 1;
     }
