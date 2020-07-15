@@ -526,29 +526,74 @@ static int count_client (int i)
   return res;
 }
 
-static int json_display (int new_display_idx, char buf[32768])
+static int json_display (int new_display_idx, char buf[21504])
 {
 // TODO
   return 0;
 }
 
-static void set_color (char c, char intens, char *p)
+static int set_intens (char intens, char buf[21504], int idx)
 {
-  *p++ = 27;
-  *p++ = '[';
-  *p++ = intens;
-  *p++ = ';';
-  *p++ = '3';
-  *p++ = '6';
-  *p++ = ';';
-  *p++ = '4';
-  *p++ = '0';
-  *p++ = 'm';
-  *p++ = c;
-  *p++ = 27;
-  *p++ = '[';
-  *p++ = '0';
-  *p++ = 'm';
+  static char old_intens = -1;
+
+  if (old_intens != intens) {
+    buf[idx++] = 27;
+    buf[idx++] = '[';
+    buf[idx++] = '0';
+    buf[idx++] = 'm';
+    buf[idx++] = 27;
+    buf[idx++] = '[';
+    buf[idx++] = (intens ? '1' : '2');
+    buf[idx++] = ';';
+    buf[idx++] = '3';
+    buf[idx++] = '6';
+    buf[idx++] = ';';
+    buf[idx++] = '4';
+    buf[idx++] = '0';
+    buf[idx++] = 'm';
+    old_intens = intens;
+  }
+
+  return idx;
+}
+
+static int status_line (char buf[21504], int idx)
+{
+  int i;
+
+  buf[idx++] = '\n';
+  for (i = 0; i < 17; i++)
+    buf[idx++] = ' ';
+  buf[idx++] = '4';
+  if (sampling_rate == 48000) {
+    buf[idx++] = '8';
+    buf[idx++] = '0';
+  } else {
+    buf[idx++] = '4';
+    buf[idx++] = '1';
+  }
+  buf[idx++] = '0';
+  buf[idx++] = '0';
+  buf[idx++] = ' ';
+  buf[idx++] = 'H';
+  buf[idx++] = 'z';
+  buf[idx++] = ' ';
+  buf[idx++] = '/';
+  buf[idx++] = ' ';
+  buf[idx++] = (sampling_channels == 1 ? '1' : '2');
+  buf[idx++] = ' ';
+  buf[idx++] = 'C';
+  buf[idx++] = 'h';
+  buf[idx++] = 'a';
+  buf[idx++] = 'n';
+  buf[idx++] = 'n';
+  buf[idx++] = 'e';
+  buf[idx++] = 'l';
+  buf[idx++] = 's';
+  for (i = 0; i < 17; i++)
+    buf[idx++] = ' ';
+
+  return idx;
 }
 
 static int color_display (int new_display_idx, char buf[21504])
@@ -559,20 +604,23 @@ static int color_display (int new_display_idx, char buf[21504])
     buf[idx++] = '\n';
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
-      if (display_buf[new_display_idx][0][col] >= row)
-        set_color('=', '1', &buf[idx + col * 15]);
-      else
-        set_color('=', '2', &buf[idx + col * 15]);
-
-      if (display_buf[new_display_idx][1][col] >= row)
-        set_color('=', '1', &buf[idx + DISPLAY_BANDS * 15 + 15 + col * 15]);
-      else
-        set_color('=', '2', &buf[idx + DISPLAY_BANDS * 15 + 15 + col * 15]);
+      int intens = (display_buf[new_display_idx][0][col] >= row);
+      idx = set_intens(intens, buf, idx);
+      buf[idx++] = '=';
     }
 
-    set_color(' ', '2', &buf[idx + DISPLAY_BANDS * 15]);
-    idx += 2 * DISPLAY_BANDS * 15 + 15;
+    idx = set_intens(0, buf, idx);
+    buf[idx++] = ' ';
+
+    for (col = 0; col < DISPLAY_BANDS; col++) {
+      int intens = (display_buf[new_display_idx][1][col] >= row);
+      idx = set_intens(intens, buf, idx);
+      buf[idx++] = '=';
+    }
   }
+
+  idx = set_intens(0, buf, idx);
+  idx = status_line(buf, idx);
 
   return idx;
 }
@@ -595,6 +643,8 @@ static int mono_display (int new_display_idx, char buf[21504])
     idx += 2 * DISPLAY_BANDS + 1;
   }
 
+  idx = status_line(buf, idx);
+
   return idx;
 }
 
@@ -602,8 +652,8 @@ static void start_display (struct client_worker_arg *arg,
                            int (*display_func)(int, char[21504]))
 {
   /* color_display needs:
-     25 bars * ((27 bands * 2 channels + space) * 15 chars + newline) = 20650
-   */
+     (25 bars + status line) *
+     ((27 bands * 2 channels + space) * 15 chars + newline) = 21476 */
   char buf[21504];
   int res, new_display_idx;
 
