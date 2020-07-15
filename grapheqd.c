@@ -26,14 +26,13 @@
 
 #define GRAPHEQD_VERSION "1"
 
-#define SAMPLING_RATE 44100 // Hz
-#define SAMPLING_CHANNELS 2 // stereo
-#define SAMPLING_WIDTH 2    // 16 bit signed per channel per sample
+#define MAX_CHANNELS 2    /* stereo */
+#define SAMPLING_WIDTH 2  /* 16 bit signed per channel per sample */
 #define SAMPLING_FORMAT SND_PCM_FORMAT_S16 /* keep in sync to SAMPLING_WIDTH
                                               and every use of int16_t */
-#define DISPLAY_BANDS 27 /* 27 bands/buckets per channel displayed */
+#define DISPLAY_BANDS 27 /* 27 bands/buckets per channel displayed     */
 #define DISPLAY_BARS 25  /* 25 segments per band */
-#define FFT_SIZE 4096    /* must be power of 2 */
+#define FFT_SIZE 4096    /* must be power of 2   */
 
 #define log_error(fmt, params ...) do { \
   if (foreground) warnx(fmt "\n", ## params); \
@@ -59,7 +58,7 @@ struct client_worker_arg {
 };
 
 static int pcm_idx = 0;
-static int16_t pcm_buf[2][FFT_SIZE * SAMPLING_CHANNELS];
+static int16_t pcm_buf[2][FFT_SIZE * MAX_CHANNELS];
 static pthread_mutex_t pcm_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pcm_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t fft_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -67,9 +66,13 @@ static pthread_cond_t fft_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t display_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t display_cond = PTHREAD_COND_INITIALIZER;
 static int display_idx = 0;
-static unsigned char display_buf[2][SAMPLING_CHANNELS][DISPLAY_BANDS];
+static unsigned char display_buf[2][MAX_CHANNELS][DISPLAY_BANDS];
 static int num_clients = 0;
 static pthread_mutex_t num_mtx = PTHREAD_MUTEX_INITIALIZER;
+/* set by alsa_open() */
+static void (*fill_bands) (float (*) [FFT_SIZE / 2], float,
+                           unsigned char (*) [DISPLAY_BANDS]);
+static int channels;
 
 /* used by main() and sigterm_handler() */
 static int running = 1;
@@ -217,61 +220,6 @@ static void change_user (struct passwd *pw)
     err(1, "setuid()");
 }
 
-static snd_pcm_t *open_alsa (const char *soundcard)
-{
-  snd_pcm_t *handle;
-  snd_pcm_hw_params_t *params;
-  int err;
-
-  err = snd_pcm_open(&handle, soundcard, SND_PCM_STREAM_CAPTURE, 0);
-  if (err)
-    errx(1, "cannot open %s for capturing: %s", soundcard, snd_strerror(err));
-
-  err = snd_pcm_hw_params_malloc(&params);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_alloca()", snd_strerror(err));
-
-  err = snd_pcm_hw_params_any(handle, params);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_any()", snd_strerror(err));
-
-  err = snd_pcm_hw_params_set_access(handle, params,
-                                     SND_PCM_ACCESS_RW_INTERLEAVED);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_access(INTERLEAVED)",
-                      snd_strerror(err));
-
-  err = snd_pcm_hw_params_set_format(handle, params, SAMPLING_FORMAT);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_format("
-                      STR(SAMPLING_WIDTH*2) ")", snd_strerror(err));
-
-/* FIXME */
-  err = snd_pcm_hw_params_set_channels(handle, params, SAMPLING_CHANNELS);
-  if (err)
-warnx("%s: %s", "snd_pcm_hw_params_set_channels("
-                      STR(SAMPLING_CHANNELS) ")", snd_strerror(err));
-
-/* FIXME */
-  err = snd_pcm_hw_params_set_rate(handle, params, SAMPLING_RATE, 0);
-  if (err)
-warnx( "%s: %s", "snd_pcm_hw_params_set_rate(" STR(SAMPLING_RATE) ")",
-                      snd_strerror(err));
-
-  err = snd_pcm_hw_params_set_period_size(handle, params, FFT_SIZE, 0);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) ")",
-                      snd_strerror(err));
-
-  err = snd_pcm_hw_params(handle, params);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params()", snd_strerror(err));
-
-  snd_pcm_hw_params_free(params);
-
-  return handle;
-}
-
 static void client_address (struct client_worker_arg *arg)
 {
   char addr[INET6_ADDRSTRLEN];
@@ -311,13 +259,12 @@ static char fill_band (float (*level)[FFT_SIZE / 2], float max_level,
   return floor((DISPLAY_BARS * sum) / ((end - start) * max_level));
 }
 
-static void fill_bands (float (*level)[FFT_SIZE / 2], float max_level,
-                        unsigned char (*display)[DISPLAY_BANDS])
+static void fill_bands48000 (float (*level)[FFT_SIZE / 2], float max_level,
+                             unsigned char (*display)[DISPLAY_BANDS])
 {
-  /* base values for 2048 fft size at 44100 Hz */
+  /* base values for 2048 fft size at 48000 Hz */
   const int c = FFT_SIZE / 2048;
-
-#if SAMPLING_RATE==44100
+// FIXME
   /* 21.5 Hz */
   (*display)[0] = fill_band(level, max_level,  c*0,  c*1);
   /* 43 */
@@ -372,10 +319,68 @@ static void fill_bands (float (*level)[FFT_SIZE / 2], float max_level,
   (*display)[25] = fill_band(level, max_level, c*604, c*744);
   /* 16017.5 - 22050 */
   (*display)[26] = fill_band(level, max_level, c*744, c*1024);
-#elif SAMPLING_RATE==48000
-#else
-#  error Unknown SAMPLING_RATE
-#endif
+}
+
+static void fill_bands44100 (float (*level)[FFT_SIZE / 2], float max_level,
+                             unsigned char (*display)[DISPLAY_BANDS])
+{
+  /* base values for 2048 fft size at 44100 Hz */
+  const int c = FFT_SIZE / 2048;
+
+  /* 21.5 Hz */
+  (*display)[0] = fill_band(level, max_level,  c*0,  c*1);
+  /* 43 */
+  (*display)[1] = fill_band(level, max_level,  c*1,  c*2);
+  /* 64.5 */
+  (*display)[2] = fill_band(level, max_level,  c*2,  c*3);
+  /* 86 */
+  (*display)[3] = fill_band(level, max_level,  c*3,  c*4);
+  /* 107.5 */
+  (*display)[4] = fill_band(level, max_level,  c*4,  c*5);
+  /* 129 - 150.5 */
+  (*display)[5] = fill_band(level, max_level,  c*5,  c*7);
+  /* 172 - 193.5 */
+  (*display)[6] = fill_band(level, max_level,  c*7,  c*9);
+  /* 215 - 236.5 */
+  (*display)[7] = fill_band(level, max_level,  c*9,  c*11);
+  /* 258 - 301 */
+  (*display)[8] = fill_band(level, max_level,  c*11, c*14);
+  /* 322.5 - 387 */
+  (*display)[9] = fill_band(level, max_level,  c*15, c*18);
+  /* 408.5 - 494.5 */
+  (*display)[10] = fill_band(level, max_level, c*18, c*23);
+  /* 473 - 602 */
+  (*display)[11] = fill_band(level, max_level, c*23, c*28);
+  /* 623.5 - 795.5*/
+  (*display)[12] = fill_band(level, max_level, c*28, c*37);
+  /* 817 - 989 */
+  (*display)[13] = fill_band(level, max_level, c*37, c*46);
+  /* 1010.5 - 1225.5 */
+  (*display)[14] = fill_band(level, max_level, c*46, c*57);
+  /* 1247 - 1483.5 */
+  (*display)[15] = fill_band(level, max_level, c*57, c*69);
+  /* 1505 - 1978 */
+  (*display)[16] = fill_band(level, max_level, c*69, c*92);
+  /* 1999.5 - 2472.5 */
+  (*display)[17] = fill_band(level, max_level, c*92, c*115);
+  /* 2494 - 3182 */
+  (*display)[18] = fill_band(level, max_level, c*115, c*148);
+  /* 3203.5 - 3891.5 */
+  (*display)[19] = fill_band(level, max_level, c*148, c*181);
+  /* 3913 - 5075 */
+  (*display)[20] = fill_band(level, max_level, c*181, c*236);
+  /* 5095.5 - 6278 */
+  (*display)[21] = fill_band(level, max_level, c*236, c*292);
+  /* 6299.5 - 8127 */
+  (*display)[22] = fill_band(level, max_level, c*292, c*378);
+  /* 8148.5 - 9976 */
+  (*display)[23] = fill_band(level, max_level, c*378, c*464);
+  /* 9997.5 - 12986 */
+  (*display)[24] = fill_band(level, max_level, c*464, c*604);
+  /* 13007.5 - 15996 */
+  (*display)[25] = fill_band(level, max_level, c*604, c*744);
+  /* 16017.5 - 22050 */
+  (*display)[26] = fill_band(level, max_level, c*744, c*1024);
 }
 
 static float calculate_power (kiss_fft_cpx fft_out, float *max_level)
@@ -390,16 +395,73 @@ static float calculate_power (kiss_fft_cpx fft_out, float *max_level)
   return power;
 }
 
-static void *fft_worker (void *arg0)
+static void fft_mono (kiss_fft_cfg fft_cfg)
 {
-  kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
-  int res, i, new_pcm_idx;
+  int i, new_pcm_idx;
+  kiss_fft_cpx lin[FFT_SIZE];
+  kiss_fft_cpx lout[FFT_SIZE];
+  float llevel[FFT_SIZE / 2];
+  /* kiss_fft emits 131072 when fed with a pure sine, so it's a good starting
+     point */
+  static float max_level = 131072.;
+
+  new_pcm_idx = pcm_idx;
+  new_pcm_idx = 1 - new_pcm_idx;
+
+  for (i = 0; i < FFT_SIZE; i++) {
+    /* left channel */
+    lin[i].r = pcm_buf[new_pcm_idx][2 * i];
+    lin[i].i = 0;
+  }
+
+  kiss_fft(fft_cfg, &lin[0], &lout[0]);
+
+  for (i = 0; i < FFT_SIZE / 2; i++) {
+    llevel[i] = calculate_power(lout[i], &max_level);
+  }
+
+  fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
+  fill_bands(&llevel, max_level, &display_buf[display_idx][1]);
+}
+
+static void fft_stereo (kiss_fft_cfg fft_cfg)
+{
+  int i, new_pcm_idx;
   kiss_fft_cpx lin[FFT_SIZE], rin[FFT_SIZE];
   kiss_fft_cpx lout[FFT_SIZE], rout[FFT_SIZE];
   float llevel[FFT_SIZE / 2], rlevel[FFT_SIZE / 2];
   /* kiss_fft emits 131072 when fed with a pure sine, so it's a good starting
      point */
   static float max_level = 131072.;
+
+  new_pcm_idx = pcm_idx;
+  new_pcm_idx = 1 - new_pcm_idx;
+
+  for (i = 0; i < FFT_SIZE; i++) {
+    /* left channel */
+    lin[i].r = pcm_buf[new_pcm_idx][2 * i];
+    lin[i].i = 0;
+    /* right channel */
+    rin[i].r = pcm_buf[new_pcm_idx][2 * i + 1];
+    rin[i].i = 0;
+  }
+
+  kiss_fft(fft_cfg, &lin[0], &lout[0]);
+  kiss_fft(fft_cfg, &rin[0], &rout[0]);
+
+  for (i = 0; i < FFT_SIZE / 2; i++) {
+    llevel[i] = calculate_power(lout[i], &max_level);
+    rlevel[i] = calculate_power(rout[i], &max_level);
+  }
+
+  fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
+  fill_bands(&rlevel, max_level, &display_buf[display_idx][1]);
+}
+
+static void *fft_worker (void *arg0)
+{
+  kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
+  int res;
 
   pthread_setname_np(pthread_self(), "grapheqd:fft");
 
@@ -417,28 +479,10 @@ static void *fft_worker (void *arg0)
       break;
     }
 
-    new_pcm_idx = pcm_idx;
-    new_pcm_idx = 1 - new_pcm_idx;
-
-    for (i = 0; i < FFT_SIZE; i++) {
-      /* left channel */
-      lin[i].r = pcm_buf[new_pcm_idx][2 * i];
-      lin[i].i = 0;
-      /* right channel */
-      rin[i].r = pcm_buf[new_pcm_idx][2 * i + 1];
-      rin[i].i = 0;
-    }
-
-    kiss_fft(fft_cfg, &lin[0], &lout[0]);
-    kiss_fft(fft_cfg, &rin[0], &rout[0]);
-
-    for (i = 0; i < FFT_SIZE / 2; i++) {
-      llevel[i] = calculate_power(lout[i], &max_level);
-      rlevel[i] = calculate_power(rout[i], &max_level);
-    }
-
-    fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
-    fill_bands(&rlevel, max_level, &display_buf[display_idx][1]);
+    if (channels == 1)
+      fft_mono(fft_cfg);
+    else
+      fft_stereo(fft_cfg);
 
     display_idx = 1 - display_idx;
 
@@ -874,6 +918,69 @@ static void create_helper_worker (void *(*start_routine)(void*), void *arg,
   res = pthread_create(&thread, NULL, start_routine, arg);
   if (res != 0)
     errx(1, "cannot create %s worker thread: %s", name, strerror(res));
+}
+
+static snd_pcm_t *open_alsa (const char *soundcard)
+{
+  snd_pcm_t *handle;
+  snd_pcm_hw_params_t *params;
+  int err;
+
+  err = snd_pcm_open(&handle, soundcard, SND_PCM_STREAM_CAPTURE, 0);
+  if (err)
+    errx(1, "cannot open %s for capturing: %s", soundcard, snd_strerror(err));
+
+  err = snd_pcm_hw_params_malloc(&params);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_alloca()", snd_strerror(err));
+
+  err = snd_pcm_hw_params_any(handle, params);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_any()", snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_access(handle, params,
+                                     SND_PCM_ACCESS_RW_INTERLEAVED);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_access(INTERLEAVED)",
+                      snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_format(handle, params, SAMPLING_FORMAT);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_format("
+                      STR(SAMPLING_WIDTH*2) ")", snd_strerror(err));
+
+  channels = 2;
+  err = snd_pcm_hw_params_set_channels(handle, params, 2);
+  if (err) {
+    channels = 1;
+    err = snd_pcm_hw_params_set_channels(handle, params, 1);
+  }
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_channels(2 or 1)",
+                      snd_strerror(err));
+
+  fill_bands = &fill_bands44100;
+  err = snd_pcm_hw_params_set_rate(handle, params, 44100, 0);
+  if (err) {
+    fill_bands = &fill_bands48000;
+    err = snd_pcm_hw_params_set_rate(handle, params, 48000, 0);
+  }
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_rate(44100 or 48000)",
+                      snd_strerror(err));
+
+  err = snd_pcm_hw_params_set_period_size(handle, params, FFT_SIZE, 0);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) ")",
+                      snd_strerror(err));
+
+  err = snd_pcm_hw_params(handle, params);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params()", snd_strerror(err));
+
+  snd_pcm_hw_params_free(params);
+
+  return handle;
 }
 
 static void show_help ()
