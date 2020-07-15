@@ -526,194 +526,114 @@ static int count_client (int i)
   return res;
 }
 
-static int json_display (int new_display_idx, char buf[21504])
+static inline char *str2buf (char *buf, const char * const str)
 {
-// TODO
-  return 0;
+  memcpy(buf, str, strlen(str));
+  return buf + strlen(str);
 }
 
-static int set_intens (char intens, char buf[21504], int idx)
+static char *json_display (int new_display_idx, char *buf)
 {
-  static char old_intens = -1;
+  char *p = buf;
+  const char * const json = "{\"rate\":44100,\"channels\":2,\n"
+                            "\"left\":[25,25,25,25,25,25,25,25,25,25,25,25,"
+                            "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25],\n"
+                            "\"right\":[25,25,25,25,25,25,25,25,25,25,25,25,"
+                            "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25]}";
 
-  if (old_intens != intens) {
-    buf[idx++] = 27;
-    buf[idx++] = '[';
-    buf[idx++] = '0';
-    buf[idx++] = 'm';
-    buf[idx++] = 27;
-    buf[idx++] = '[';
-    buf[idx++] = (intens ? '1' : '2');
-    buf[idx++] = ';';
-    buf[idx++] = '3';
-    buf[idx++] = '6';
-    buf[idx++] = ';';
-    buf[idx++] = '4';
-    buf[idx++] = '0';
-    buf[idx++] = 'm';
-    old_intens = intens;
+  p = str2buf(p, json);
+
+  return p;
+}
+
+static char *green_on_black (char bright, char *buf)
+{
+  char *p = buf;
+  static char old_bright = -1;
+  const char * const esc_seq = "\x1b[0m\x1b[ ;36;40m";
+
+  if (old_bright != bright) {
+    p = str2buf(p, esc_seq);
+    *(p - 8) = (bright ? '1' : '2');
+    old_bright = bright;
   }
 
-  return idx;
+  return p;
 }
 
-static int color_display (int new_display_idx, char buf[21504])
+static char *color_display (int new_display_idx, char *buf)
 {
-  int row, col, idx = 0, i;
+  char *p = buf;
+  int row, col;
+  const char * const status_line = "\n    \x1b[0m\x1b[ ;36;40mMono      "
+                                   "\x1b[0m\x1b[ ;36;40mStereo         "
+                                   "\x1b[0m\x1b[ ;36;40m44100 Hz      "
+                                   "\x1b[0m\x1b[ ;36;40m48000 Hz    ";
 
   for (row = DISPLAY_BARS; row > 0; row--) {
-    buf[idx++] = '\n';
+    *p++ = '\n';
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
-      int intens = (display_buf[new_display_idx][0][col] >= row);
-      idx = set_intens(intens, buf, idx);
-      buf[idx++] = '=';
+      int bright = (display_buf[new_display_idx][0][col] >= row);
+      p = green_on_black(bright, p);
+      *p++ = '=';
     }
 
-    idx = set_intens(0, buf, idx);
-    buf[idx++] = ' ';
+    p = green_on_black(0, p);
+    *p++ = ' ';
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
-      int intens = (display_buf[new_display_idx][1][col] >= row);
-      idx = set_intens(intens, buf, idx);
-      buf[idx++] = '=';
+      int bright = (display_buf[new_display_idx][1][col] >= row);
+      p = green_on_black(bright, p);
+      *p++ = '=';
     }
   }
 
-  idx = set_intens(0, buf, idx);
+  p = str2buf(p, status_line);
+  *(p - 101) = (sampling_channels == 2 ? '2' : '1');
+  *(p - 77) = (sampling_channels == 2 ? '1' : '2');
+  *(p - 48) = (sampling_rate == 44100 ? '1' : '2');
+  *(p - 20) = (sampling_rate == 44100 ? '2' : '1');
 
-  /* yuck */
-  buf[idx++] = '\n';
-  for (i = 0; i < 4; i++)
-    buf[idx++] = ' ';
-  idx = set_intens((sampling_channels != 2), buf, idx);
-  buf[idx++] = 'M';
-  buf[idx++] = 'o';
-  buf[idx++] = 'n';
-  buf[idx++] = 'o';
-  for (i = 0; i < 6; i++)
-    buf[idx++] = ' ';
-  idx = set_intens((sampling_channels == 2), buf, idx);
-  buf[idx++] = 'S';
-  buf[idx++] = 't';
-  buf[idx++] = 'e';
-  buf[idx++] = 'r';
-  buf[idx++] = 'e';
-  buf[idx++] = 'o';
-  for (i = 0; i < 9; i++)
-    buf[idx++] = ' ';
-  idx = set_intens((sampling_rate == 44100), buf, idx);
-  buf[idx++] = '4';
-  buf[idx++] = '4';
-  buf[idx++] = '1';
-  buf[idx++] = '0';
-  buf[idx++] = '0';
-  buf[idx++] = ' ';
-  buf[idx++] = 'H';
-  buf[idx++] = 'z';
-  for (i = 0; i < 6; i++)
-    buf[idx++] = ' ';
-  idx = set_intens((sampling_rate != 44100), buf, idx);
-  buf[idx++] = '4';
-  buf[idx++] = '8';
-  buf[idx++] = '0';
-  buf[idx++] = '0';
-  buf[idx++] = '0';
-  buf[idx++] = ' ';
-  buf[idx++] = 'H';
-  buf[idx++] = 'z';
-  for (i = 0; i < 4; i++)
-    buf[idx++] = ' ';
-
-  return idx;
+  return p;
 }
 
-static int mono_display (int new_display_idx, char buf[21504])
+static char *mono_display (int new_display_idx, char *buf)
 {
-  int row, col, idx = 0;
+  char *p = buf;
+  int row, col;
+  const char * const status_line = "\n  [ ] Mono  [ ] Stereo     "
+                                   "[ ] 44100 Hz  [ ] 48000 Hz  ";
 
   for (row = DISPLAY_BARS; row > 0; row--) {
-    buf[idx++] = '\n';
+    *p++ = '\n';
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
-      buf[idx + col] =
-                    (display_buf[new_display_idx][0][col] >= row ? '*' : '.');
-      buf[idx + col + DISPLAY_BANDS + 1] =
+      *(p + col) = (display_buf[new_display_idx][0][col] >= row ? '*' : '.');
+      *(p + col + DISPLAY_BANDS + 1) =
                     (display_buf[new_display_idx][1][col] >= row ? '*' : '.');
     }
 
-    buf[idx + DISPLAY_BANDS] = ' ';
-    idx += 2 * DISPLAY_BANDS + 1;
+    *(p + DISPLAY_BANDS) = ' ';
+    p += 2 * DISPLAY_BANDS + 1;
   }
 
-  /* yuck */
-  buf[idx++] = '\n';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
-  buf[idx++] = '[';
-  buf[idx++] = (sampling_channels == 2 ? ' ' : 'X');
-  buf[idx++] = ']';
-  buf[idx++] = ' ';
-  buf[idx++] = 'M';
-  buf[idx++] = 'o';
-  buf[idx++] = 'n';
-  buf[idx++] = 'o';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
-  buf[idx++] = '[';
-  buf[idx++] = (sampling_channels == 2 ? 'X' : ' ');
-  buf[idx++] = ']';
-  buf[idx++] = ' ';
-  buf[idx++] = 'S';
-  buf[idx++] = 't';
-  buf[idx++] = 'e';
-  buf[idx++] = 'r';
-  buf[idx++] = 'e';
-  buf[idx++] = 'o';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
-  buf[idx++] = '[';
-  buf[idx++] = (sampling_rate == 44100 ? 'X' : ' ');
-  buf[idx++] = ']';
-  buf[idx++] = ' ';
-  buf[idx++] = '4';
-  buf[idx++] = '4';
-  buf[idx++] = '1';
-  buf[idx++] = '0';
-  buf[idx++] = '0';
-  buf[idx++] = ' ';
-  buf[idx++] = 'H';
-  buf[idx++] = 'z';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
-  buf[idx++] = '[';
-  buf[idx++] = (sampling_rate == 44100 ? ' ' : 'X');
-  buf[idx++] = ']';
-  buf[idx++] = ' ';
-  buf[idx++] = '4';
-  buf[idx++] = '8';
-  buf[idx++] = '0';
-  buf[idx++] = '0';
-  buf[idx++] = '0';
-  buf[idx++] = ' ';
-  buf[idx++] = 'H';
-  buf[idx++] = 'z';
-  buf[idx++] = ' ';
-  buf[idx++] = ' ';
+  p = str2buf(p, status_line);
+  *(p - 52) = (sampling_channels == 2 ? ' ' : 'X');
+  *(p - 42) = (sampling_channels == 2 ? ' ' : 'X');
+  *(p - 27) = (sampling_rate == 44100 ? 'X' : ' ');
+  *(p - 13) = (sampling_rate == 44100 ? ' ' : 'X');
 
-  return idx;
+  return p;
 }
 
 static void start_display (struct client_worker_arg *arg,
-                           int (*display_func)(int, char[21504]))
+                           char * (*display_func)(int, char *))
 {
   /* color_display needs:
      (25 bars + status line) *
      ((27 bands * 2 channels + space) * 15 chars + newline) = 21476 */
-  char buf[21504];
+  char buf[21504], *p;
   int res, new_display_idx;
 
   while (1) {
@@ -746,9 +666,9 @@ static void start_display (struct client_worker_arg *arg,
     new_display_idx = display_idx;
     new_display_idx = 1 - new_display_idx;
 
-    res = (*display_func)(new_display_idx, buf);
+    p = (*display_func)(new_display_idx, buf);
 
-    if (write(arg->socket, buf, res) != res)
+    if (write(arg->socket, buf, p - buf) != p - buf)
       return;
   }
 }
