@@ -11,7 +11,7 @@ body {
   padding:0;
   margin:0;
   background-color:black;
-  height:90vh;
+  height:100vh;
 }
 #errorPane {
   width:100%;
@@ -43,35 +43,1481 @@ body {
   margin:0;
   z-index:999;
 }
-#grapheqd {
-  width:90%;
-  height:100%;
-  margin:0 auto 0 auto;
-border:1px solid red;
-}
-#status {
-  width:100%;
-  height:10%;
-  color:darkcyan;
-border:1px solid red;
-}
 #about {
   width:100%;
   text-align:center;
   white-space:nowrap;
-  margin-top:10%;
+  margin-top:3%;
   font-size:50%;
-border:1px solid red;
 }
 a {
   color:darkcyan;
+}
+#grapheqd {
+  width:90%;
+  height:30%;
+  margin:0 auto 0 auto;
+  padding-top:10%;
+}
+#matrix {
+  width:100%;
+  height:100%;
+}
+.channel {
+  width:50%;
+  height:100%;
+  display:inline-block;
+}
+.band {
+  width:3.2%;
+  height:100%;
+  display:inline-block;
+  margin-right:0.5%;
+}
+.bar {
+  width:100%;
+  height:3%;
+  margin-top:0px;
+  margin-bottom:10%;
+  background-color:cyan;
+  opacity:0.2;
+}
+#status {
+  width:100%;
+  margin-top:2%;
+  text-align:center;
+}
+#mono, #stereo, #hz44100, #hz48000 {
+  color:cyan;
+  opacity:0.2;
+}
+#mono, #hz48000 {
+  margin-left:5%;
+  margin-right:5%;
+}
+#stereo {
+  margin-left:5%;
+  margin-right:10%;
+}
+#hz44100 {
+  margin-left:10%;
+  margin-right:5%;
 }
 </style>
 </head>
 <body>
 <div id="grapheqd">
-<textarea id="foo" cols="100" rows="30"></textarea>
-<div style="width:20px;height:10px;background-color:cyan;opacity:0.7"></div>
+<div id="matrix">
+<div class="channel">
+<div class="band">
+<div id="l0_24" class="bar"></div>
+<div id="l0_23" class="bar"></div>
+<div id="l0_22" class="bar"></div>
+<div id="l0_21" class="bar"></div>
+<div id="l0_20" class="bar"></div>
+<div id="l0_19" class="bar"></div>
+<div id="l0_18" class="bar"></div>
+<div id="l0_17" class="bar"></div>
+<div id="l0_16" class="bar"></div>
+<div id="l0_15" class="bar"></div>
+<div id="l0_14" class="bar"></div>
+<div id="l0_13" class="bar"></div>
+<div id="l0_12" class="bar"></div>
+<div id="l0_11" class="bar"></div>
+<div id="l0_10" class="bar"></div>
+<div id="l0_9" class="bar"></div>
+<div id="l0_8" class="bar"></div>
+<div id="l0_7" class="bar"></div>
+<div id="l0_6" class="bar"></div>
+<div id="l0_5" class="bar"></div>
+<div id="l0_4" class="bar"></div>
+<div id="l0_3" class="bar"></div>
+<div id="l0_2" class="bar"></div>
+<div id="l0_1" class="bar"></div>
+<div id="l0_0" class="bar"></div>
+</div><div class="band">
+<div id="l1_24" class="bar"></div>
+<div id="l1_23" class="bar"></div>
+<div id="l1_22" class="bar"></div>
+<div id="l1_21" class="bar"></div>
+<div id="l1_20" class="bar"></div>
+<div id="l1_19" class="bar"></div>
+<div id="l1_18" class="bar"></div>
+<div id="l1_17" class="bar"></div>
+<div id="l1_16" class="bar"></div>
+<div id="l1_15" class="bar"></div>
+<div id="l1_14" class="bar"></div>
+<div id="l1_13" class="bar"></div>
+<div id="l1_12" class="bar"></div>
+<div id="l1_11" class="bar"></div>
+<div id="l1_10" class="bar"></div>
+<div id="l1_9" class="bar"></div>
+<div id="l1_8" class="bar"></div>
+<div id="l1_7" class="bar"></div>
+<div id="l1_6" class="bar"></div>
+<div id="l1_5" class="bar"></div>
+<div id="l1_4" class="bar"></div>
+<div id="l1_3" class="bar"></div>
+<div id="l1_2" class="bar"></div>
+<div id="l1_1" class="bar"></div>
+<div id="l1_0" class="bar"></div>
+</div><div class="band">
+<div id="l2_24" class="bar"></div>
+<div id="l2_23" class="bar"></div>
+<div id="l2_22" class="bar"></div>
+<div id="l2_21" class="bar"></div>
+<div id="l2_20" class="bar"></div>
+<div id="l2_19" class="bar"></div>
+<div id="l2_18" class="bar"></div>
+<div id="l2_17" class="bar"></div>
+<div id="l2_16" class="bar"></div>
+<div id="l2_15" class="bar"></div>
+<div id="l2_14" class="bar"></div>
+<div id="l2_13" class="bar"></div>
+<div id="l2_12" class="bar"></div>
+<div id="l2_11" class="bar"></div>
+<div id="l2_10" class="bar"></div>
+<div id="l2_9" class="bar"></div>
+<div id="l2_8" class="bar"></div>
+<div id="l2_7" class="bar"></div>
+<div id="l2_6" class="bar"></div>
+<div id="l2_5" class="bar"></div>
+<div id="l2_4" class="bar"></div>
+<div id="l2_3" class="bar"></div>
+<div id="l2_2" class="bar"></div>
+<div id="l2_1" class="bar"></div>
+<div id="l2_0" class="bar"></div>
+</div><div class="band">
+<div id="l3_24" class="bar"></div>
+<div id="l3_23" class="bar"></div>
+<div id="l3_22" class="bar"></div>
+<div id="l3_21" class="bar"></div>
+<div id="l3_20" class="bar"></div>
+<div id="l3_19" class="bar"></div>
+<div id="l3_18" class="bar"></div>
+<div id="l3_17" class="bar"></div>
+<div id="l3_16" class="bar"></div>
+<div id="l3_15" class="bar"></div>
+<div id="l3_14" class="bar"></div>
+<div id="l3_13" class="bar"></div>
+<div id="l3_12" class="bar"></div>
+<div id="l3_11" class="bar"></div>
+<div id="l3_10" class="bar"></div>
+<div id="l3_9" class="bar"></div>
+<div id="l3_8" class="bar"></div>
+<div id="l3_7" class="bar"></div>
+<div id="l3_6" class="bar"></div>
+<div id="l3_5" class="bar"></div>
+<div id="l3_4" class="bar"></div>
+<div id="l3_3" class="bar"></div>
+<div id="l3_2" class="bar"></div>
+<div id="l3_1" class="bar"></div>
+<div id="l3_0" class="bar"></div>
+</div><div class="band">
+<div id="l4_24" class="bar"></div>
+<div id="l4_23" class="bar"></div>
+<div id="l4_22" class="bar"></div>
+<div id="l4_21" class="bar"></div>
+<div id="l4_20" class="bar"></div>
+<div id="l4_19" class="bar"></div>
+<div id="l4_18" class="bar"></div>
+<div id="l4_17" class="bar"></div>
+<div id="l4_16" class="bar"></div>
+<div id="l4_15" class="bar"></div>
+<div id="l4_14" class="bar"></div>
+<div id="l4_13" class="bar"></div>
+<div id="l4_12" class="bar"></div>
+<div id="l4_11" class="bar"></div>
+<div id="l4_10" class="bar"></div>
+<div id="l4_9" class="bar"></div>
+<div id="l4_8" class="bar"></div>
+<div id="l4_7" class="bar"></div>
+<div id="l4_6" class="bar"></div>
+<div id="l4_5" class="bar"></div>
+<div id="l4_4" class="bar"></div>
+<div id="l4_3" class="bar"></div>
+<div id="l4_2" class="bar"></div>
+<div id="l4_1" class="bar"></div>
+<div id="l4_0" class="bar"></div>
+</div><div class="band">
+<div id="l5_24" class="bar"></div>
+<div id="l5_23" class="bar"></div>
+<div id="l5_22" class="bar"></div>
+<div id="l5_21" class="bar"></div>
+<div id="l5_20" class="bar"></div>
+<div id="l5_19" class="bar"></div>
+<div id="l5_18" class="bar"></div>
+<div id="l5_17" class="bar"></div>
+<div id="l5_16" class="bar"></div>
+<div id="l5_15" class="bar"></div>
+<div id="l5_14" class="bar"></div>
+<div id="l5_13" class="bar"></div>
+<div id="l5_12" class="bar"></div>
+<div id="l5_11" class="bar"></div>
+<div id="l5_10" class="bar"></div>
+<div id="l5_9" class="bar"></div>
+<div id="l5_8" class="bar"></div>
+<div id="l5_7" class="bar"></div>
+<div id="l5_6" class="bar"></div>
+<div id="l5_5" class="bar"></div>
+<div id="l5_4" class="bar"></div>
+<div id="l5_3" class="bar"></div>
+<div id="l5_2" class="bar"></div>
+<div id="l5_1" class="bar"></div>
+<div id="l5_0" class="bar"></div>
+</div><div class="band">
+<div id="l6_24" class="bar"></div>
+<div id="l6_23" class="bar"></div>
+<div id="l6_22" class="bar"></div>
+<div id="l6_21" class="bar"></div>
+<div id="l6_20" class="bar"></div>
+<div id="l6_19" class="bar"></div>
+<div id="l6_18" class="bar"></div>
+<div id="l6_17" class="bar"></div>
+<div id="l6_16" class="bar"></div>
+<div id="l6_15" class="bar"></div>
+<div id="l6_14" class="bar"></div>
+<div id="l6_13" class="bar"></div>
+<div id="l6_12" class="bar"></div>
+<div id="l6_11" class="bar"></div>
+<div id="l6_10" class="bar"></div>
+<div id="l6_9" class="bar"></div>
+<div id="l6_8" class="bar"></div>
+<div id="l6_7" class="bar"></div>
+<div id="l6_6" class="bar"></div>
+<div id="l6_5" class="bar"></div>
+<div id="l6_4" class="bar"></div>
+<div id="l6_3" class="bar"></div>
+<div id="l6_2" class="bar"></div>
+<div id="l6_1" class="bar"></div>
+<div id="l6_0" class="bar"></div>
+</div><div class="band">
+<div id="l7_24" class="bar"></div>
+<div id="l7_23" class="bar"></div>
+<div id="l7_22" class="bar"></div>
+<div id="l7_21" class="bar"></div>
+<div id="l7_20" class="bar"></div>
+<div id="l7_19" class="bar"></div>
+<div id="l7_18" class="bar"></div>
+<div id="l7_17" class="bar"></div>
+<div id="l7_16" class="bar"></div>
+<div id="l7_15" class="bar"></div>
+<div id="l7_14" class="bar"></div>
+<div id="l7_13" class="bar"></div>
+<div id="l7_12" class="bar"></div>
+<div id="l7_11" class="bar"></div>
+<div id="l7_10" class="bar"></div>
+<div id="l7_9" class="bar"></div>
+<div id="l7_8" class="bar"></div>
+<div id="l7_7" class="bar"></div>
+<div id="l7_6" class="bar"></div>
+<div id="l7_5" class="bar"></div>
+<div id="l7_4" class="bar"></div>
+<div id="l7_3" class="bar"></div>
+<div id="l7_2" class="bar"></div>
+<div id="l7_1" class="bar"></div>
+<div id="l7_0" class="bar"></div>
+</div><div class="band">
+<div id="l8_24" class="bar"></div>
+<div id="l8_23" class="bar"></div>
+<div id="l8_22" class="bar"></div>
+<div id="l8_21" class="bar"></div>
+<div id="l8_20" class="bar"></div>
+<div id="l8_19" class="bar"></div>
+<div id="l8_18" class="bar"></div>
+<div id="l8_17" class="bar"></div>
+<div id="l8_16" class="bar"></div>
+<div id="l8_15" class="bar"></div>
+<div id="l8_14" class="bar"></div>
+<div id="l8_13" class="bar"></div>
+<div id="l8_12" class="bar"></div>
+<div id="l8_11" class="bar"></div>
+<div id="l8_10" class="bar"></div>
+<div id="l8_9" class="bar"></div>
+<div id="l8_8" class="bar"></div>
+<div id="l8_7" class="bar"></div>
+<div id="l8_6" class="bar"></div>
+<div id="l8_5" class="bar"></div>
+<div id="l8_4" class="bar"></div>
+<div id="l8_3" class="bar"></div>
+<div id="l8_2" class="bar"></div>
+<div id="l8_1" class="bar"></div>
+<div id="l8_0" class="bar"></div>
+</div><div class="band">
+<div id="l9_24" class="bar"></div>
+<div id="l9_23" class="bar"></div>
+<div id="l9_22" class="bar"></div>
+<div id="l9_21" class="bar"></div>
+<div id="l9_20" class="bar"></div>
+<div id="l9_19" class="bar"></div>
+<div id="l9_18" class="bar"></div>
+<div id="l9_17" class="bar"></div>
+<div id="l9_16" class="bar"></div>
+<div id="l9_15" class="bar"></div>
+<div id="l9_14" class="bar"></div>
+<div id="l9_13" class="bar"></div>
+<div id="l9_12" class="bar"></div>
+<div id="l9_11" class="bar"></div>
+<div id="l9_10" class="bar"></div>
+<div id="l9_9" class="bar"></div>
+<div id="l9_8" class="bar"></div>
+<div id="l9_7" class="bar"></div>
+<div id="l9_6" class="bar"></div>
+<div id="l9_5" class="bar"></div>
+<div id="l9_4" class="bar"></div>
+<div id="l9_3" class="bar"></div>
+<div id="l9_2" class="bar"></div>
+<div id="l9_1" class="bar"></div>
+<div id="l9_0" class="bar"></div>
+</div><div class="band">
+<div id="l10_24" class="bar"></div>
+<div id="l10_23" class="bar"></div>
+<div id="l10_22" class="bar"></div>
+<div id="l10_21" class="bar"></div>
+<div id="l10_20" class="bar"></div>
+<div id="l10_19" class="bar"></div>
+<div id="l10_18" class="bar"></div>
+<div id="l10_17" class="bar"></div>
+<div id="l10_16" class="bar"></div>
+<div id="l10_15" class="bar"></div>
+<div id="l10_14" class="bar"></div>
+<div id="l10_13" class="bar"></div>
+<div id="l10_12" class="bar"></div>
+<div id="l10_11" class="bar"></div>
+<div id="l10_10" class="bar"></div>
+<div id="l10_9" class="bar"></div>
+<div id="l10_8" class="bar"></div>
+<div id="l10_7" class="bar"></div>
+<div id="l10_6" class="bar"></div>
+<div id="l10_5" class="bar"></div>
+<div id="l10_4" class="bar"></div>
+<div id="l10_3" class="bar"></div>
+<div id="l10_2" class="bar"></div>
+<div id="l10_1" class="bar"></div>
+<div id="l10_0" class="bar"></div>
+</div><div class="band">
+<div id="l11_24" class="bar"></div>
+<div id="l11_23" class="bar"></div>
+<div id="l11_22" class="bar"></div>
+<div id="l11_21" class="bar"></div>
+<div id="l11_20" class="bar"></div>
+<div id="l11_19" class="bar"></div>
+<div id="l11_18" class="bar"></div>
+<div id="l11_17" class="bar"></div>
+<div id="l11_16" class="bar"></div>
+<div id="l11_15" class="bar"></div>
+<div id="l11_14" class="bar"></div>
+<div id="l11_13" class="bar"></div>
+<div id="l11_12" class="bar"></div>
+<div id="l11_11" class="bar"></div>
+<div id="l11_10" class="bar"></div>
+<div id="l11_9" class="bar"></div>
+<div id="l11_8" class="bar"></div>
+<div id="l11_7" class="bar"></div>
+<div id="l11_6" class="bar"></div>
+<div id="l11_5" class="bar"></div>
+<div id="l11_4" class="bar"></div>
+<div id="l11_3" class="bar"></div>
+<div id="l11_2" class="bar"></div>
+<div id="l11_1" class="bar"></div>
+<div id="l11_0" class="bar"></div>
+</div><div class="band">
+<div id="l12_24" class="bar"></div>
+<div id="l12_23" class="bar"></div>
+<div id="l12_22" class="bar"></div>
+<div id="l12_21" class="bar"></div>
+<div id="l12_20" class="bar"></div>
+<div id="l12_19" class="bar"></div>
+<div id="l12_18" class="bar"></div>
+<div id="l12_17" class="bar"></div>
+<div id="l12_16" class="bar"></div>
+<div id="l12_15" class="bar"></div>
+<div id="l12_14" class="bar"></div>
+<div id="l12_13" class="bar"></div>
+<div id="l12_12" class="bar"></div>
+<div id="l12_11" class="bar"></div>
+<div id="l12_10" class="bar"></div>
+<div id="l12_9" class="bar"></div>
+<div id="l12_8" class="bar"></div>
+<div id="l12_7" class="bar"></div>
+<div id="l12_6" class="bar"></div>
+<div id="l12_5" class="bar"></div>
+<div id="l12_4" class="bar"></div>
+<div id="l12_3" class="bar"></div>
+<div id="l12_2" class="bar"></div>
+<div id="l12_1" class="bar"></div>
+<div id="l12_0" class="bar"></div>
+</div><div class="band">
+<div id="l13_24" class="bar"></div>
+<div id="l13_23" class="bar"></div>
+<div id="l13_22" class="bar"></div>
+<div id="l13_21" class="bar"></div>
+<div id="l13_20" class="bar"></div>
+<div id="l13_19" class="bar"></div>
+<div id="l13_18" class="bar"></div>
+<div id="l13_17" class="bar"></div>
+<div id="l13_16" class="bar"></div>
+<div id="l13_15" class="bar"></div>
+<div id="l13_14" class="bar"></div>
+<div id="l13_13" class="bar"></div>
+<div id="l13_12" class="bar"></div>
+<div id="l13_11" class="bar"></div>
+<div id="l13_10" class="bar"></div>
+<div id="l13_9" class="bar"></div>
+<div id="l13_8" class="bar"></div>
+<div id="l13_7" class="bar"></div>
+<div id="l13_6" class="bar"></div>
+<div id="l13_5" class="bar"></div>
+<div id="l13_4" class="bar"></div>
+<div id="l13_3" class="bar"></div>
+<div id="l13_2" class="bar"></div>
+<div id="l13_1" class="bar"></div>
+<div id="l13_0" class="bar"></div>
+</div><div class="band">
+<div id="l14_24" class="bar"></div>
+<div id="l14_23" class="bar"></div>
+<div id="l14_22" class="bar"></div>
+<div id="l14_21" class="bar"></div>
+<div id="l14_20" class="bar"></div>
+<div id="l14_19" class="bar"></div>
+<div id="l14_18" class="bar"></div>
+<div id="l14_17" class="bar"></div>
+<div id="l14_16" class="bar"></div>
+<div id="l14_15" class="bar"></div>
+<div id="l14_14" class="bar"></div>
+<div id="l14_13" class="bar"></div>
+<div id="l14_12" class="bar"></div>
+<div id="l14_11" class="bar"></div>
+<div id="l14_10" class="bar"></div>
+<div id="l14_9" class="bar"></div>
+<div id="l14_8" class="bar"></div>
+<div id="l14_7" class="bar"></div>
+<div id="l14_6" class="bar"></div>
+<div id="l14_5" class="bar"></div>
+<div id="l14_4" class="bar"></div>
+<div id="l14_3" class="bar"></div>
+<div id="l14_2" class="bar"></div>
+<div id="l14_1" class="bar"></div>
+<div id="l14_0" class="bar"></div>
+</div><div class="band">
+<div id="l15_24" class="bar"></div>
+<div id="l15_23" class="bar"></div>
+<div id="l15_22" class="bar"></div>
+<div id="l15_21" class="bar"></div>
+<div id="l15_20" class="bar"></div>
+<div id="l15_19" class="bar"></div>
+<div id="l15_18" class="bar"></div>
+<div id="l15_17" class="bar"></div>
+<div id="l15_16" class="bar"></div>
+<div id="l15_15" class="bar"></div>
+<div id="l15_14" class="bar"></div>
+<div id="l15_13" class="bar"></div>
+<div id="l15_12" class="bar"></div>
+<div id="l15_11" class="bar"></div>
+<div id="l15_10" class="bar"></div>
+<div id="l15_9" class="bar"></div>
+<div id="l15_8" class="bar"></div>
+<div id="l15_7" class="bar"></div>
+<div id="l15_6" class="bar"></div>
+<div id="l15_5" class="bar"></div>
+<div id="l15_4" class="bar"></div>
+<div id="l15_3" class="bar"></div>
+<div id="l15_2" class="bar"></div>
+<div id="l15_1" class="bar"></div>
+<div id="l15_0" class="bar"></div>
+</div><div class="band">
+<div id="l16_24" class="bar"></div>
+<div id="l16_23" class="bar"></div>
+<div id="l16_22" class="bar"></div>
+<div id="l16_21" class="bar"></div>
+<div id="l16_20" class="bar"></div>
+<div id="l16_19" class="bar"></div>
+<div id="l16_18" class="bar"></div>
+<div id="l16_17" class="bar"></div>
+<div id="l16_16" class="bar"></div>
+<div id="l16_15" class="bar"></div>
+<div id="l16_14" class="bar"></div>
+<div id="l16_13" class="bar"></div>
+<div id="l16_12" class="bar"></div>
+<div id="l16_11" class="bar"></div>
+<div id="l16_10" class="bar"></div>
+<div id="l16_9" class="bar"></div>
+<div id="l16_8" class="bar"></div>
+<div id="l16_7" class="bar"></div>
+<div id="l16_6" class="bar"></div>
+<div id="l16_5" class="bar"></div>
+<div id="l16_4" class="bar"></div>
+<div id="l16_3" class="bar"></div>
+<div id="l16_2" class="bar"></div>
+<div id="l16_1" class="bar"></div>
+<div id="l16_0" class="bar"></div>
+</div><div class="band">
+<div id="l17_24" class="bar"></div>
+<div id="l17_23" class="bar"></div>
+<div id="l17_22" class="bar"></div>
+<div id="l17_21" class="bar"></div>
+<div id="l17_20" class="bar"></div>
+<div id="l17_19" class="bar"></div>
+<div id="l17_18" class="bar"></div>
+<div id="l17_17" class="bar"></div>
+<div id="l17_16" class="bar"></div>
+<div id="l17_15" class="bar"></div>
+<div id="l17_14" class="bar"></div>
+<div id="l17_13" class="bar"></div>
+<div id="l17_12" class="bar"></div>
+<div id="l17_11" class="bar"></div>
+<div id="l17_10" class="bar"></div>
+<div id="l17_9" class="bar"></div>
+<div id="l17_8" class="bar"></div>
+<div id="l17_7" class="bar"></div>
+<div id="l17_6" class="bar"></div>
+<div id="l17_5" class="bar"></div>
+<div id="l17_4" class="bar"></div>
+<div id="l17_3" class="bar"></div>
+<div id="l17_2" class="bar"></div>
+<div id="l17_1" class="bar"></div>
+<div id="l17_0" class="bar"></div>
+</div><div class="band">
+<div id="l18_24" class="bar"></div>
+<div id="l18_23" class="bar"></div>
+<div id="l18_22" class="bar"></div>
+<div id="l18_21" class="bar"></div>
+<div id="l18_20" class="bar"></div>
+<div id="l18_19" class="bar"></div>
+<div id="l18_18" class="bar"></div>
+<div id="l18_17" class="bar"></div>
+<div id="l18_16" class="bar"></div>
+<div id="l18_15" class="bar"></div>
+<div id="l18_14" class="bar"></div>
+<div id="l18_13" class="bar"></div>
+<div id="l18_12" class="bar"></div>
+<div id="l18_11" class="bar"></div>
+<div id="l18_10" class="bar"></div>
+<div id="l18_9" class="bar"></div>
+<div id="l18_8" class="bar"></div>
+<div id="l18_7" class="bar"></div>
+<div id="l18_6" class="bar"></div>
+<div id="l18_5" class="bar"></div>
+<div id="l18_4" class="bar"></div>
+<div id="l18_3" class="bar"></div>
+<div id="l18_2" class="bar"></div>
+<div id="l18_1" class="bar"></div>
+<div id="l18_0" class="bar"></div>
+</div><div class="band">
+<div id="l19_24" class="bar"></div>
+<div id="l19_23" class="bar"></div>
+<div id="l19_22" class="bar"></div>
+<div id="l19_21" class="bar"></div>
+<div id="l19_20" class="bar"></div>
+<div id="l19_19" class="bar"></div>
+<div id="l19_18" class="bar"></div>
+<div id="l19_17" class="bar"></div>
+<div id="l19_16" class="bar"></div>
+<div id="l19_15" class="bar"></div>
+<div id="l19_14" class="bar"></div>
+<div id="l19_13" class="bar"></div>
+<div id="l19_12" class="bar"></div>
+<div id="l19_11" class="bar"></div>
+<div id="l19_10" class="bar"></div>
+<div id="l19_9" class="bar"></div>
+<div id="l19_8" class="bar"></div>
+<div id="l19_7" class="bar"></div>
+<div id="l19_6" class="bar"></div>
+<div id="l19_5" class="bar"></div>
+<div id="l19_4" class="bar"></div>
+<div id="l19_3" class="bar"></div>
+<div id="l19_2" class="bar"></div>
+<div id="l19_1" class="bar"></div>
+<div id="l19_0" class="bar"></div>
+</div><div class="band">
+<div id="l20_24" class="bar"></div>
+<div id="l20_23" class="bar"></div>
+<div id="l20_22" class="bar"></div>
+<div id="l20_21" class="bar"></div>
+<div id="l20_20" class="bar"></div>
+<div id="l20_19" class="bar"></div>
+<div id="l20_18" class="bar"></div>
+<div id="l20_17" class="bar"></div>
+<div id="l20_16" class="bar"></div>
+<div id="l20_15" class="bar"></div>
+<div id="l20_14" class="bar"></div>
+<div id="l20_13" class="bar"></div>
+<div id="l20_12" class="bar"></div>
+<div id="l20_11" class="bar"></div>
+<div id="l20_10" class="bar"></div>
+<div id="l20_9" class="bar"></div>
+<div id="l20_8" class="bar"></div>
+<div id="l20_7" class="bar"></div>
+<div id="l20_6" class="bar"></div>
+<div id="l20_5" class="bar"></div>
+<div id="l20_4" class="bar"></div>
+<div id="l20_3" class="bar"></div>
+<div id="l20_2" class="bar"></div>
+<div id="l20_1" class="bar"></div>
+<div id="l20_0" class="bar"></div>
+</div><div class="band">
+<div id="l21_24" class="bar"></div>
+<div id="l21_23" class="bar"></div>
+<div id="l21_22" class="bar"></div>
+<div id="l21_21" class="bar"></div>
+<div id="l21_20" class="bar"></div>
+<div id="l21_19" class="bar"></div>
+<div id="l21_18" class="bar"></div>
+<div id="l21_17" class="bar"></div>
+<div id="l21_16" class="bar"></div>
+<div id="l21_15" class="bar"></div>
+<div id="l21_14" class="bar"></div>
+<div id="l21_13" class="bar"></div>
+<div id="l21_12" class="bar"></div>
+<div id="l21_11" class="bar"></div>
+<div id="l21_10" class="bar"></div>
+<div id="l21_9" class="bar"></div>
+<div id="l21_8" class="bar"></div>
+<div id="l21_7" class="bar"></div>
+<div id="l21_6" class="bar"></div>
+<div id="l21_5" class="bar"></div>
+<div id="l21_4" class="bar"></div>
+<div id="l21_3" class="bar"></div>
+<div id="l21_2" class="bar"></div>
+<div id="l21_1" class="bar"></div>
+<div id="l21_0" class="bar"></div>
+</div><div class="band">
+<div id="l22_24" class="bar"></div>
+<div id="l22_23" class="bar"></div>
+<div id="l22_22" class="bar"></div>
+<div id="l22_21" class="bar"></div>
+<div id="l22_20" class="bar"></div>
+<div id="l22_19" class="bar"></div>
+<div id="l22_18" class="bar"></div>
+<div id="l22_17" class="bar"></div>
+<div id="l22_16" class="bar"></div>
+<div id="l22_15" class="bar"></div>
+<div id="l22_14" class="bar"></div>
+<div id="l22_13" class="bar"></div>
+<div id="l22_12" class="bar"></div>
+<div id="l22_11" class="bar"></div>
+<div id="l22_10" class="bar"></div>
+<div id="l22_9" class="bar"></div>
+<div id="l22_8" class="bar"></div>
+<div id="l22_7" class="bar"></div>
+<div id="l22_6" class="bar"></div>
+<div id="l22_5" class="bar"></div>
+<div id="l22_4" class="bar"></div>
+<div id="l22_3" class="bar"></div>
+<div id="l22_2" class="bar"></div>
+<div id="l22_1" class="bar"></div>
+<div id="l22_0" class="bar"></div>
+</div><div class="band">
+<div id="l23_24" class="bar"></div>
+<div id="l23_23" class="bar"></div>
+<div id="l23_22" class="bar"></div>
+<div id="l23_21" class="bar"></div>
+<div id="l23_20" class="bar"></div>
+<div id="l23_19" class="bar"></div>
+<div id="l23_18" class="bar"></div>
+<div id="l23_17" class="bar"></div>
+<div id="l23_16" class="bar"></div>
+<div id="l23_15" class="bar"></div>
+<div id="l23_14" class="bar"></div>
+<div id="l23_13" class="bar"></div>
+<div id="l23_12" class="bar"></div>
+<div id="l23_11" class="bar"></div>
+<div id="l23_10" class="bar"></div>
+<div id="l23_9" class="bar"></div>
+<div id="l23_8" class="bar"></div>
+<div id="l23_7" class="bar"></div>
+<div id="l23_6" class="bar"></div>
+<div id="l23_5" class="bar"></div>
+<div id="l23_4" class="bar"></div>
+<div id="l23_3" class="bar"></div>
+<div id="l23_2" class="bar"></div>
+<div id="l23_1" class="bar"></div>
+<div id="l23_0" class="bar"></div>
+</div><div class="band">
+<div id="l24_24" class="bar"></div>
+<div id="l24_23" class="bar"></div>
+<div id="l24_22" class="bar"></div>
+<div id="l24_21" class="bar"></div>
+<div id="l24_20" class="bar"></div>
+<div id="l24_19" class="bar"></div>
+<div id="l24_18" class="bar"></div>
+<div id="l24_17" class="bar"></div>
+<div id="l24_16" class="bar"></div>
+<div id="l24_15" class="bar"></div>
+<div id="l24_14" class="bar"></div>
+<div id="l24_13" class="bar"></div>
+<div id="l24_12" class="bar"></div>
+<div id="l24_11" class="bar"></div>
+<div id="l24_10" class="bar"></div>
+<div id="l24_9" class="bar"></div>
+<div id="l24_8" class="bar"></div>
+<div id="l24_7" class="bar"></div>
+<div id="l24_6" class="bar"></div>
+<div id="l24_5" class="bar"></div>
+<div id="l24_4" class="bar"></div>
+<div id="l24_3" class="bar"></div>
+<div id="l24_2" class="bar"></div>
+<div id="l24_1" class="bar"></div>
+<div id="l24_0" class="bar"></div>
+</div><div class="band">
+<div id="l25_24" class="bar"></div>
+<div id="l25_23" class="bar"></div>
+<div id="l25_22" class="bar"></div>
+<div id="l25_21" class="bar"></div>
+<div id="l25_20" class="bar"></div>
+<div id="l25_19" class="bar"></div>
+<div id="l25_18" class="bar"></div>
+<div id="l25_17" class="bar"></div>
+<div id="l25_16" class="bar"></div>
+<div id="l25_15" class="bar"></div>
+<div id="l25_14" class="bar"></div>
+<div id="l25_13" class="bar"></div>
+<div id="l25_12" class="bar"></div>
+<div id="l25_11" class="bar"></div>
+<div id="l25_10" class="bar"></div>
+<div id="l25_9" class="bar"></div>
+<div id="l25_8" class="bar"></div>
+<div id="l25_7" class="bar"></div>
+<div id="l25_6" class="bar"></div>
+<div id="l25_5" class="bar"></div>
+<div id="l25_4" class="bar"></div>
+<div id="l25_3" class="bar"></div>
+<div id="l25_2" class="bar"></div>
+<div id="l25_1" class="bar"></div>
+<div id="l25_0" class="bar"></div>
+</div><div class="band">
+<div id="l26_24" class="bar"></div>
+<div id="l26_23" class="bar"></div>
+<div id="l26_22" class="bar"></div>
+<div id="l26_21" class="bar"></div>
+<div id="l26_20" class="bar"></div>
+<div id="l26_19" class="bar"></div>
+<div id="l26_18" class="bar"></div>
+<div id="l26_17" class="bar"></div>
+<div id="l26_16" class="bar"></div>
+<div id="l26_15" class="bar"></div>
+<div id="l26_14" class="bar"></div>
+<div id="l26_13" class="bar"></div>
+<div id="l26_12" class="bar"></div>
+<div id="l26_11" class="bar"></div>
+<div id="l26_10" class="bar"></div>
+<div id="l26_9" class="bar"></div>
+<div id="l26_8" class="bar"></div>
+<div id="l26_7" class="bar"></div>
+<div id="l26_6" class="bar"></div>
+<div id="l26_5" class="bar"></div>
+<div id="l26_4" class="bar"></div>
+<div id="l26_3" class="bar"></div>
+<div id="l26_2" class="bar"></div>
+<div id="l26_1" class="bar"></div>
+<div id="l26_0" class="bar"></div>
+</div>
+</div><div class="channel">
+<div class="band">
+<div id="r0_24" class="bar"></div>
+<div id="r0_23" class="bar"></div>
+<div id="r0_22" class="bar"></div>
+<div id="r0_21" class="bar"></div>
+<div id="r0_20" class="bar"></div>
+<div id="r0_19" class="bar"></div>
+<div id="r0_18" class="bar"></div>
+<div id="r0_17" class="bar"></div>
+<div id="r0_16" class="bar"></div>
+<div id="r0_15" class="bar"></div>
+<div id="r0_14" class="bar"></div>
+<div id="r0_13" class="bar"></div>
+<div id="r0_12" class="bar"></div>
+<div id="r0_11" class="bar"></div>
+<div id="r0_10" class="bar"></div>
+<div id="r0_9" class="bar"></div>
+<div id="r0_8" class="bar"></div>
+<div id="r0_7" class="bar"></div>
+<div id="r0_6" class="bar"></div>
+<div id="r0_5" class="bar"></div>
+<div id="r0_4" class="bar"></div>
+<div id="r0_3" class="bar"></div>
+<div id="r0_2" class="bar"></div>
+<div id="r0_1" class="bar"></div>
+<div id="r0_0" class="bar"></div>
+</div><div class="band">
+<div id="r1_24" class="bar"></div>
+<div id="r1_23" class="bar"></div>
+<div id="r1_22" class="bar"></div>
+<div id="r1_21" class="bar"></div>
+<div id="r1_20" class="bar"></div>
+<div id="r1_19" class="bar"></div>
+<div id="r1_18" class="bar"></div>
+<div id="r1_17" class="bar"></div>
+<div id="r1_16" class="bar"></div>
+<div id="r1_15" class="bar"></div>
+<div id="r1_14" class="bar"></div>
+<div id="r1_13" class="bar"></div>
+<div id="r1_12" class="bar"></div>
+<div id="r1_11" class="bar"></div>
+<div id="r1_10" class="bar"></div>
+<div id="r1_9" class="bar"></div>
+<div id="r1_8" class="bar"></div>
+<div id="r1_7" class="bar"></div>
+<div id="r1_6" class="bar"></div>
+<div id="r1_5" class="bar"></div>
+<div id="r1_4" class="bar"></div>
+<div id="r1_3" class="bar"></div>
+<div id="r1_2" class="bar"></div>
+<div id="r1_1" class="bar"></div>
+<div id="r1_0" class="bar"></div>
+</div><div class="band">
+<div id="r2_24" class="bar"></div>
+<div id="r2_23" class="bar"></div>
+<div id="r2_22" class="bar"></div>
+<div id="r2_21" class="bar"></div>
+<div id="r2_20" class="bar"></div>
+<div id="r2_19" class="bar"></div>
+<div id="r2_18" class="bar"></div>
+<div id="r2_17" class="bar"></div>
+<div id="r2_16" class="bar"></div>
+<div id="r2_15" class="bar"></div>
+<div id="r2_14" class="bar"></div>
+<div id="r2_13" class="bar"></div>
+<div id="r2_12" class="bar"></div>
+<div id="r2_11" class="bar"></div>
+<div id="r2_10" class="bar"></div>
+<div id="r2_9" class="bar"></div>
+<div id="r2_8" class="bar"></div>
+<div id="r2_7" class="bar"></div>
+<div id="r2_6" class="bar"></div>
+<div id="r2_5" class="bar"></div>
+<div id="r2_4" class="bar"></div>
+<div id="r2_3" class="bar"></div>
+<div id="r2_2" class="bar"></div>
+<div id="r2_1" class="bar"></div>
+<div id="r2_0" class="bar"></div>
+</div><div class="band">
+<div id="r3_24" class="bar"></div>
+<div id="r3_23" class="bar"></div>
+<div id="r3_22" class="bar"></div>
+<div id="r3_21" class="bar"></div>
+<div id="r3_20" class="bar"></div>
+<div id="r3_19" class="bar"></div>
+<div id="r3_18" class="bar"></div>
+<div id="r3_17" class="bar"></div>
+<div id="r3_16" class="bar"></div>
+<div id="r3_15" class="bar"></div>
+<div id="r3_14" class="bar"></div>
+<div id="r3_13" class="bar"></div>
+<div id="r3_12" class="bar"></div>
+<div id="r3_11" class="bar"></div>
+<div id="r3_10" class="bar"></div>
+<div id="r3_9" class="bar"></div>
+<div id="r3_8" class="bar"></div>
+<div id="r3_7" class="bar"></div>
+<div id="r3_6" class="bar"></div>
+<div id="r3_5" class="bar"></div>
+<div id="r3_4" class="bar"></div>
+<div id="r3_3" class="bar"></div>
+<div id="r3_2" class="bar"></div>
+<div id="r3_1" class="bar"></div>
+<div id="r3_0" class="bar"></div>
+</div><div class="band">
+<div id="r4_24" class="bar"></div>
+<div id="r4_23" class="bar"></div>
+<div id="r4_22" class="bar"></div>
+<div id="r4_21" class="bar"></div>
+<div id="r4_20" class="bar"></div>
+<div id="r4_19" class="bar"></div>
+<div id="r4_18" class="bar"></div>
+<div id="r4_17" class="bar"></div>
+<div id="r4_16" class="bar"></div>
+<div id="r4_15" class="bar"></div>
+<div id="r4_14" class="bar"></div>
+<div id="r4_13" class="bar"></div>
+<div id="r4_12" class="bar"></div>
+<div id="r4_11" class="bar"></div>
+<div id="r4_10" class="bar"></div>
+<div id="r4_9" class="bar"></div>
+<div id="r4_8" class="bar"></div>
+<div id="r4_7" class="bar"></div>
+<div id="r4_6" class="bar"></div>
+<div id="r4_5" class="bar"></div>
+<div id="r4_4" class="bar"></div>
+<div id="r4_3" class="bar"></div>
+<div id="r4_2" class="bar"></div>
+<div id="r4_1" class="bar"></div>
+<div id="r4_0" class="bar"></div>
+</div><div class="band">
+<div id="r5_24" class="bar"></div>
+<div id="r5_23" class="bar"></div>
+<div id="r5_22" class="bar"></div>
+<div id="r5_21" class="bar"></div>
+<div id="r5_20" class="bar"></div>
+<div id="r5_19" class="bar"></div>
+<div id="r5_18" class="bar"></div>
+<div id="r5_17" class="bar"></div>
+<div id="r5_16" class="bar"></div>
+<div id="r5_15" class="bar"></div>
+<div id="r5_14" class="bar"></div>
+<div id="r5_13" class="bar"></div>
+<div id="r5_12" class="bar"></div>
+<div id="r5_11" class="bar"></div>
+<div id="r5_10" class="bar"></div>
+<div id="r5_9" class="bar"></div>
+<div id="r5_8" class="bar"></div>
+<div id="r5_7" class="bar"></div>
+<div id="r5_6" class="bar"></div>
+<div id="r5_5" class="bar"></div>
+<div id="r5_4" class="bar"></div>
+<div id="r5_3" class="bar"></div>
+<div id="r5_2" class="bar"></div>
+<div id="r5_1" class="bar"></div>
+<div id="r5_0" class="bar"></div>
+</div><div class="band">
+<div id="r6_24" class="bar"></div>
+<div id="r6_23" class="bar"></div>
+<div id="r6_22" class="bar"></div>
+<div id="r6_21" class="bar"></div>
+<div id="r6_20" class="bar"></div>
+<div id="r6_19" class="bar"></div>
+<div id="r6_18" class="bar"></div>
+<div id="r6_17" class="bar"></div>
+<div id="r6_16" class="bar"></div>
+<div id="r6_15" class="bar"></div>
+<div id="r6_14" class="bar"></div>
+<div id="r6_13" class="bar"></div>
+<div id="r6_12" class="bar"></div>
+<div id="r6_11" class="bar"></div>
+<div id="r6_10" class="bar"></div>
+<div id="r6_9" class="bar"></div>
+<div id="r6_8" class="bar"></div>
+<div id="r6_7" class="bar"></div>
+<div id="r6_6" class="bar"></div>
+<div id="r6_5" class="bar"></div>
+<div id="r6_4" class="bar"></div>
+<div id="r6_3" class="bar"></div>
+<div id="r6_2" class="bar"></div>
+<div id="r6_1" class="bar"></div>
+<div id="r6_0" class="bar"></div>
+</div><div class="band">
+<div id="r7_24" class="bar"></div>
+<div id="r7_23" class="bar"></div>
+<div id="r7_22" class="bar"></div>
+<div id="r7_21" class="bar"></div>
+<div id="r7_20" class="bar"></div>
+<div id="r7_19" class="bar"></div>
+<div id="r7_18" class="bar"></div>
+<div id="r7_17" class="bar"></div>
+<div id="r7_16" class="bar"></div>
+<div id="r7_15" class="bar"></div>
+<div id="r7_14" class="bar"></div>
+<div id="r7_13" class="bar"></div>
+<div id="r7_12" class="bar"></div>
+<div id="r7_11" class="bar"></div>
+<div id="r7_10" class="bar"></div>
+<div id="r7_9" class="bar"></div>
+<div id="r7_8" class="bar"></div>
+<div id="r7_7" class="bar"></div>
+<div id="r7_6" class="bar"></div>
+<div id="r7_5" class="bar"></div>
+<div id="r7_4" class="bar"></div>
+<div id="r7_3" class="bar"></div>
+<div id="r7_2" class="bar"></div>
+<div id="r7_1" class="bar"></div>
+<div id="r7_0" class="bar"></div>
+</div><div class="band">
+<div id="r8_24" class="bar"></div>
+<div id="r8_23" class="bar"></div>
+<div id="r8_22" class="bar"></div>
+<div id="r8_21" class="bar"></div>
+<div id="r8_20" class="bar"></div>
+<div id="r8_19" class="bar"></div>
+<div id="r8_18" class="bar"></div>
+<div id="r8_17" class="bar"></div>
+<div id="r8_16" class="bar"></div>
+<div id="r8_15" class="bar"></div>
+<div id="r8_14" class="bar"></div>
+<div id="r8_13" class="bar"></div>
+<div id="r8_12" class="bar"></div>
+<div id="r8_11" class="bar"></div>
+<div id="r8_10" class="bar"></div>
+<div id="r8_9" class="bar"></div>
+<div id="r8_8" class="bar"></div>
+<div id="r8_7" class="bar"></div>
+<div id="r8_6" class="bar"></div>
+<div id="r8_5" class="bar"></div>
+<div id="r8_4" class="bar"></div>
+<div id="r8_3" class="bar"></div>
+<div id="r8_2" class="bar"></div>
+<div id="r8_1" class="bar"></div>
+<div id="r8_0" class="bar"></div>
+</div><div class="band">
+<div id="r9_24" class="bar"></div>
+<div id="r9_23" class="bar"></div>
+<div id="r9_22" class="bar"></div>
+<div id="r9_21" class="bar"></div>
+<div id="r9_20" class="bar"></div>
+<div id="r9_19" class="bar"></div>
+<div id="r9_18" class="bar"></div>
+<div id="r9_17" class="bar"></div>
+<div id="r9_16" class="bar"></div>
+<div id="r9_15" class="bar"></div>
+<div id="r9_14" class="bar"></div>
+<div id="r9_13" class="bar"></div>
+<div id="r9_12" class="bar"></div>
+<div id="r9_11" class="bar"></div>
+<div id="r9_10" class="bar"></div>
+<div id="r9_9" class="bar"></div>
+<div id="r9_8" class="bar"></div>
+<div id="r9_7" class="bar"></div>
+<div id="r9_6" class="bar"></div>
+<div id="r9_5" class="bar"></div>
+<div id="r9_4" class="bar"></div>
+<div id="r9_3" class="bar"></div>
+<div id="r9_2" class="bar"></div>
+<div id="r9_1" class="bar"></div>
+<div id="r9_0" class="bar"></div>
+</div><div class="band">
+<div id="r10_24" class="bar"></div>
+<div id="r10_23" class="bar"></div>
+<div id="r10_22" class="bar"></div>
+<div id="r10_21" class="bar"></div>
+<div id="r10_20" class="bar"></div>
+<div id="r10_19" class="bar"></div>
+<div id="r10_18" class="bar"></div>
+<div id="r10_17" class="bar"></div>
+<div id="r10_16" class="bar"></div>
+<div id="r10_15" class="bar"></div>
+<div id="r10_14" class="bar"></div>
+<div id="r10_13" class="bar"></div>
+<div id="r10_12" class="bar"></div>
+<div id="r10_11" class="bar"></div>
+<div id="r10_10" class="bar"></div>
+<div id="r10_9" class="bar"></div>
+<div id="r10_8" class="bar"></div>
+<div id="r10_7" class="bar"></div>
+<div id="r10_6" class="bar"></div>
+<div id="r10_5" class="bar"></div>
+<div id="r10_4" class="bar"></div>
+<div id="r10_3" class="bar"></div>
+<div id="r10_2" class="bar"></div>
+<div id="r10_1" class="bar"></div>
+<div id="r10_0" class="bar"></div>
+</div><div class="band">
+<div id="r11_24" class="bar"></div>
+<div id="r11_23" class="bar"></div>
+<div id="r11_22" class="bar"></div>
+<div id="r11_21" class="bar"></div>
+<div id="r11_20" class="bar"></div>
+<div id="r11_19" class="bar"></div>
+<div id="r11_18" class="bar"></div>
+<div id="r11_17" class="bar"></div>
+<div id="r11_16" class="bar"></div>
+<div id="r11_15" class="bar"></div>
+<div id="r11_14" class="bar"></div>
+<div id="r11_13" class="bar"></div>
+<div id="r11_12" class="bar"></div>
+<div id="r11_11" class="bar"></div>
+<div id="r11_10" class="bar"></div>
+<div id="r11_9" class="bar"></div>
+<div id="r11_8" class="bar"></div>
+<div id="r11_7" class="bar"></div>
+<div id="r11_6" class="bar"></div>
+<div id="r11_5" class="bar"></div>
+<div id="r11_4" class="bar"></div>
+<div id="r11_3" class="bar"></div>
+<div id="r11_2" class="bar"></div>
+<div id="r11_1" class="bar"></div>
+<div id="r11_0" class="bar"></div>
+</div><div class="band">
+<div id="r12_24" class="bar"></div>
+<div id="r12_23" class="bar"></div>
+<div id="r12_22" class="bar"></div>
+<div id="r12_21" class="bar"></div>
+<div id="r12_20" class="bar"></div>
+<div id="r12_19" class="bar"></div>
+<div id="r12_18" class="bar"></div>
+<div id="r12_17" class="bar"></div>
+<div id="r12_16" class="bar"></div>
+<div id="r12_15" class="bar"></div>
+<div id="r12_14" class="bar"></div>
+<div id="r12_13" class="bar"></div>
+<div id="r12_12" class="bar"></div>
+<div id="r12_11" class="bar"></div>
+<div id="r12_10" class="bar"></div>
+<div id="r12_9" class="bar"></div>
+<div id="r12_8" class="bar"></div>
+<div id="r12_7" class="bar"></div>
+<div id="r12_6" class="bar"></div>
+<div id="r12_5" class="bar"></div>
+<div id="r12_4" class="bar"></div>
+<div id="r12_3" class="bar"></div>
+<div id="r12_2" class="bar"></div>
+<div id="r12_1" class="bar"></div>
+<div id="r12_0" class="bar"></div>
+</div><div class="band">
+<div id="r13_24" class="bar"></div>
+<div id="r13_23" class="bar"></div>
+<div id="r13_22" class="bar"></div>
+<div id="r13_21" class="bar"></div>
+<div id="r13_20" class="bar"></div>
+<div id="r13_19" class="bar"></div>
+<div id="r13_18" class="bar"></div>
+<div id="r13_17" class="bar"></div>
+<div id="r13_16" class="bar"></div>
+<div id="r13_15" class="bar"></div>
+<div id="r13_14" class="bar"></div>
+<div id="r13_13" class="bar"></div>
+<div id="r13_12" class="bar"></div>
+<div id="r13_11" class="bar"></div>
+<div id="r13_10" class="bar"></div>
+<div id="r13_9" class="bar"></div>
+<div id="r13_8" class="bar"></div>
+<div id="r13_7" class="bar"></div>
+<div id="r13_6" class="bar"></div>
+<div id="r13_5" class="bar"></div>
+<div id="r13_4" class="bar"></div>
+<div id="r13_3" class="bar"></div>
+<div id="r13_2" class="bar"></div>
+<div id="r13_1" class="bar"></div>
+<div id="r13_0" class="bar"></div>
+</div><div class="band">
+<div id="r14_24" class="bar"></div>
+<div id="r14_23" class="bar"></div>
+<div id="r14_22" class="bar"></div>
+<div id="r14_21" class="bar"></div>
+<div id="r14_20" class="bar"></div>
+<div id="r14_19" class="bar"></div>
+<div id="r14_18" class="bar"></div>
+<div id="r14_17" class="bar"></div>
+<div id="r14_16" class="bar"></div>
+<div id="r14_15" class="bar"></div>
+<div id="r14_14" class="bar"></div>
+<div id="r14_13" class="bar"></div>
+<div id="r14_12" class="bar"></div>
+<div id="r14_11" class="bar"></div>
+<div id="r14_10" class="bar"></div>
+<div id="r14_9" class="bar"></div>
+<div id="r14_8" class="bar"></div>
+<div id="r14_7" class="bar"></div>
+<div id="r14_6" class="bar"></div>
+<div id="r14_5" class="bar"></div>
+<div id="r14_4" class="bar"></div>
+<div id="r14_3" class="bar"></div>
+<div id="r14_2" class="bar"></div>
+<div id="r14_1" class="bar"></div>
+<div id="r14_0" class="bar"></div>
+</div><div class="band">
+<div id="r15_24" class="bar"></div>
+<div id="r15_23" class="bar"></div>
+<div id="r15_22" class="bar"></div>
+<div id="r15_21" class="bar"></div>
+<div id="r15_20" class="bar"></div>
+<div id="r15_19" class="bar"></div>
+<div id="r15_18" class="bar"></div>
+<div id="r15_17" class="bar"></div>
+<div id="r15_16" class="bar"></div>
+<div id="r15_15" class="bar"></div>
+<div id="r15_14" class="bar"></div>
+<div id="r15_13" class="bar"></div>
+<div id="r15_12" class="bar"></div>
+<div id="r15_11" class="bar"></div>
+<div id="r15_10" class="bar"></div>
+<div id="r15_9" class="bar"></div>
+<div id="r15_8" class="bar"></div>
+<div id="r15_7" class="bar"></div>
+<div id="r15_6" class="bar"></div>
+<div id="r15_5" class="bar"></div>
+<div id="r15_4" class="bar"></div>
+<div id="r15_3" class="bar"></div>
+<div id="r15_2" class="bar"></div>
+<div id="r15_1" class="bar"></div>
+<div id="r15_0" class="bar"></div>
+</div><div class="band">
+<div id="r16_24" class="bar"></div>
+<div id="r16_23" class="bar"></div>
+<div id="r16_22" class="bar"></div>
+<div id="r16_21" class="bar"></div>
+<div id="r16_20" class="bar"></div>
+<div id="r16_19" class="bar"></div>
+<div id="r16_18" class="bar"></div>
+<div id="r16_17" class="bar"></div>
+<div id="r16_16" class="bar"></div>
+<div id="r16_15" class="bar"></div>
+<div id="r16_14" class="bar"></div>
+<div id="r16_13" class="bar"></div>
+<div id="r16_12" class="bar"></div>
+<div id="r16_11" class="bar"></div>
+<div id="r16_10" class="bar"></div>
+<div id="r16_9" class="bar"></div>
+<div id="r16_8" class="bar"></div>
+<div id="r16_7" class="bar"></div>
+<div id="r16_6" class="bar"></div>
+<div id="r16_5" class="bar"></div>
+<div id="r16_4" class="bar"></div>
+<div id="r16_3" class="bar"></div>
+<div id="r16_2" class="bar"></div>
+<div id="r16_1" class="bar"></div>
+<div id="r16_0" class="bar"></div>
+</div><div class="band">
+<div id="r17_24" class="bar"></div>
+<div id="r17_23" class="bar"></div>
+<div id="r17_22" class="bar"></div>
+<div id="r17_21" class="bar"></div>
+<div id="r17_20" class="bar"></div>
+<div id="r17_19" class="bar"></div>
+<div id="r17_18" class="bar"></div>
+<div id="r17_17" class="bar"></div>
+<div id="r17_16" class="bar"></div>
+<div id="r17_15" class="bar"></div>
+<div id="r17_14" class="bar"></div>
+<div id="r17_13" class="bar"></div>
+<div id="r17_12" class="bar"></div>
+<div id="r17_11" class="bar"></div>
+<div id="r17_10" class="bar"></div>
+<div id="r17_9" class="bar"></div>
+<div id="r17_8" class="bar"></div>
+<div id="r17_7" class="bar"></div>
+<div id="r17_6" class="bar"></div>
+<div id="r17_5" class="bar"></div>
+<div id="r17_4" class="bar"></div>
+<div id="r17_3" class="bar"></div>
+<div id="r17_2" class="bar"></div>
+<div id="r17_1" class="bar"></div>
+<div id="r17_0" class="bar"></div>
+</div><div class="band">
+<div id="r18_24" class="bar"></div>
+<div id="r18_23" class="bar"></div>
+<div id="r18_22" class="bar"></div>
+<div id="r18_21" class="bar"></div>
+<div id="r18_20" class="bar"></div>
+<div id="r18_19" class="bar"></div>
+<div id="r18_18" class="bar"></div>
+<div id="r18_17" class="bar"></div>
+<div id="r18_16" class="bar"></div>
+<div id="r18_15" class="bar"></div>
+<div id="r18_14" class="bar"></div>
+<div id="r18_13" class="bar"></div>
+<div id="r18_12" class="bar"></div>
+<div id="r18_11" class="bar"></div>
+<div id="r18_10" class="bar"></div>
+<div id="r18_9" class="bar"></div>
+<div id="r18_8" class="bar"></div>
+<div id="r18_7" class="bar"></div>
+<div id="r18_6" class="bar"></div>
+<div id="r18_5" class="bar"></div>
+<div id="r18_4" class="bar"></div>
+<div id="r18_3" class="bar"></div>
+<div id="r18_2" class="bar"></div>
+<div id="r18_1" class="bar"></div>
+<div id="r18_0" class="bar"></div>
+</div><div class="band">
+<div id="r19_24" class="bar"></div>
+<div id="r19_23" class="bar"></div>
+<div id="r19_22" class="bar"></div>
+<div id="r19_21" class="bar"></div>
+<div id="r19_20" class="bar"></div>
+<div id="r19_19" class="bar"></div>
+<div id="r19_18" class="bar"></div>
+<div id="r19_17" class="bar"></div>
+<div id="r19_16" class="bar"></div>
+<div id="r19_15" class="bar"></div>
+<div id="r19_14" class="bar"></div>
+<div id="r19_13" class="bar"></div>
+<div id="r19_12" class="bar"></div>
+<div id="r19_11" class="bar"></div>
+<div id="r19_10" class="bar"></div>
+<div id="r19_9" class="bar"></div>
+<div id="r19_8" class="bar"></div>
+<div id="r19_7" class="bar"></div>
+<div id="r19_6" class="bar"></div>
+<div id="r19_5" class="bar"></div>
+<div id="r19_4" class="bar"></div>
+<div id="r19_3" class="bar"></div>
+<div id="r19_2" class="bar"></div>
+<div id="r19_1" class="bar"></div>
+<div id="r19_0" class="bar"></div>
+</div><div class="band">
+<div id="r20_24" class="bar"></div>
+<div id="r20_23" class="bar"></div>
+<div id="r20_22" class="bar"></div>
+<div id="r20_21" class="bar"></div>
+<div id="r20_20" class="bar"></div>
+<div id="r20_19" class="bar"></div>
+<div id="r20_18" class="bar"></div>
+<div id="r20_17" class="bar"></div>
+<div id="r20_16" class="bar"></div>
+<div id="r20_15" class="bar"></div>
+<div id="r20_14" class="bar"></div>
+<div id="r20_13" class="bar"></div>
+<div id="r20_12" class="bar"></div>
+<div id="r20_11" class="bar"></div>
+<div id="r20_10" class="bar"></div>
+<div id="r20_9" class="bar"></div>
+<div id="r20_8" class="bar"></div>
+<div id="r20_7" class="bar"></div>
+<div id="r20_6" class="bar"></div>
+<div id="r20_5" class="bar"></div>
+<div id="r20_4" class="bar"></div>
+<div id="r20_3" class="bar"></div>
+<div id="r20_2" class="bar"></div>
+<div id="r20_1" class="bar"></div>
+<div id="r20_0" class="bar"></div>
+</div><div class="band">
+<div id="r21_24" class="bar"></div>
+<div id="r21_23" class="bar"></div>
+<div id="r21_22" class="bar"></div>
+<div id="r21_21" class="bar"></div>
+<div id="r21_20" class="bar"></div>
+<div id="r21_19" class="bar"></div>
+<div id="r21_18" class="bar"></div>
+<div id="r21_17" class="bar"></div>
+<div id="r21_16" class="bar"></div>
+<div id="r21_15" class="bar"></div>
+<div id="r21_14" class="bar"></div>
+<div id="r21_13" class="bar"></div>
+<div id="r21_12" class="bar"></div>
+<div id="r21_11" class="bar"></div>
+<div id="r21_10" class="bar"></div>
+<div id="r21_9" class="bar"></div>
+<div id="r21_8" class="bar"></div>
+<div id="r21_7" class="bar"></div>
+<div id="r21_6" class="bar"></div>
+<div id="r21_5" class="bar"></div>
+<div id="r21_4" class="bar"></div>
+<div id="r21_3" class="bar"></div>
+<div id="r21_2" class="bar"></div>
+<div id="r21_1" class="bar"></div>
+<div id="r21_0" class="bar"></div>
+</div><div class="band">
+<div id="r22_24" class="bar"></div>
+<div id="r22_23" class="bar"></div>
+<div id="r22_22" class="bar"></div>
+<div id="r22_21" class="bar"></div>
+<div id="r22_20" class="bar"></div>
+<div id="r22_19" class="bar"></div>
+<div id="r22_18" class="bar"></div>
+<div id="r22_17" class="bar"></div>
+<div id="r22_16" class="bar"></div>
+<div id="r22_15" class="bar"></div>
+<div id="r22_14" class="bar"></div>
+<div id="r22_13" class="bar"></div>
+<div id="r22_12" class="bar"></div>
+<div id="r22_11" class="bar"></div>
+<div id="r22_10" class="bar"></div>
+<div id="r22_9" class="bar"></div>
+<div id="r22_8" class="bar"></div>
+<div id="r22_7" class="bar"></div>
+<div id="r22_6" class="bar"></div>
+<div id="r22_5" class="bar"></div>
+<div id="r22_4" class="bar"></div>
+<div id="r22_3" class="bar"></div>
+<div id="r22_2" class="bar"></div>
+<div id="r22_1" class="bar"></div>
+<div id="r22_0" class="bar"></div>
+</div><div class="band">
+<div id="r23_24" class="bar"></div>
+<div id="r23_23" class="bar"></div>
+<div id="r23_22" class="bar"></div>
+<div id="r23_21" class="bar"></div>
+<div id="r23_20" class="bar"></div>
+<div id="r23_19" class="bar"></div>
+<div id="r23_18" class="bar"></div>
+<div id="r23_17" class="bar"></div>
+<div id="r23_16" class="bar"></div>
+<div id="r23_15" class="bar"></div>
+<div id="r23_14" class="bar"></div>
+<div id="r23_13" class="bar"></div>
+<div id="r23_12" class="bar"></div>
+<div id="r23_11" class="bar"></div>
+<div id="r23_10" class="bar"></div>
+<div id="r23_9" class="bar"></div>
+<div id="r23_8" class="bar"></div>
+<div id="r23_7" class="bar"></div>
+<div id="r23_6" class="bar"></div>
+<div id="r23_5" class="bar"></div>
+<div id="r23_4" class="bar"></div>
+<div id="r23_3" class="bar"></div>
+<div id="r23_2" class="bar"></div>
+<div id="r23_1" class="bar"></div>
+<div id="r23_0" class="bar"></div>
+</div><div class="band">
+<div id="r24_24" class="bar"></div>
+<div id="r24_23" class="bar"></div>
+<div id="r24_22" class="bar"></div>
+<div id="r24_21" class="bar"></div>
+<div id="r24_20" class="bar"></div>
+<div id="r24_19" class="bar"></div>
+<div id="r24_18" class="bar"></div>
+<div id="r24_17" class="bar"></div>
+<div id="r24_16" class="bar"></div>
+<div id="r24_15" class="bar"></div>
+<div id="r24_14" class="bar"></div>
+<div id="r24_13" class="bar"></div>
+<div id="r24_12" class="bar"></div>
+<div id="r24_11" class="bar"></div>
+<div id="r24_10" class="bar"></div>
+<div id="r24_9" class="bar"></div>
+<div id="r24_8" class="bar"></div>
+<div id="r24_7" class="bar"></div>
+<div id="r24_6" class="bar"></div>
+<div id="r24_5" class="bar"></div>
+<div id="r24_4" class="bar"></div>
+<div id="r24_3" class="bar"></div>
+<div id="r24_2" class="bar"></div>
+<div id="r24_1" class="bar"></div>
+<div id="r24_0" class="bar"></div>
+</div><div class="band">
+<div id="r25_24" class="bar"></div>
+<div id="r25_23" class="bar"></div>
+<div id="r25_22" class="bar"></div>
+<div id="r25_21" class="bar"></div>
+<div id="r25_20" class="bar"></div>
+<div id="r25_19" class="bar"></div>
+<div id="r25_18" class="bar"></div>
+<div id="r25_17" class="bar"></div>
+<div id="r25_16" class="bar"></div>
+<div id="r25_15" class="bar"></div>
+<div id="r25_14" class="bar"></div>
+<div id="r25_13" class="bar"></div>
+<div id="r25_12" class="bar"></div>
+<div id="r25_11" class="bar"></div>
+<div id="r25_10" class="bar"></div>
+<div id="r25_9" class="bar"></div>
+<div id="r25_8" class="bar"></div>
+<div id="r25_7" class="bar"></div>
+<div id="r25_6" class="bar"></div>
+<div id="r25_5" class="bar"></div>
+<div id="r25_4" class="bar"></div>
+<div id="r25_3" class="bar"></div>
+<div id="r25_2" class="bar"></div>
+<div id="r25_1" class="bar"></div>
+<div id="r25_0" class="bar"></div>
+</div><div class="band">
+<div id="r26_24" class="bar"></div>
+<div id="r26_23" class="bar"></div>
+<div id="r26_22" class="bar"></div>
+<div id="r26_21" class="bar"></div>
+<div id="r26_20" class="bar"></div>
+<div id="r26_19" class="bar"></div>
+<div id="r26_18" class="bar"></div>
+<div id="r26_17" class="bar"></div>
+<div id="r26_16" class="bar"></div>
+<div id="r26_15" class="bar"></div>
+<div id="r26_14" class="bar"></div>
+<div id="r26_13" class="bar"></div>
+<div id="r26_12" class="bar"></div>
+<div id="r26_11" class="bar"></div>
+<div id="r26_10" class="bar"></div>
+<div id="r26_9" class="bar"></div>
+<div id="r26_8" class="bar"></div>
+<div id="r26_7" class="bar"></div>
+<div id="r26_6" class="bar"></div>
+<div id="r26_5" class="bar"></div>
+<div id="r26_4" class="bar"></div>
+<div id="r26_3" class="bar"></div>
+<div id="r26_2" class="bar"></div>
+<div id="r26_1" class="bar"></div>
+<div id="r26_0" class="bar"></div>
+</div>
+</div>
+</div>
 <div id="status">
 <span id="mono">Mono</span>
 <span id="stereo">Stereo</span>
@@ -98,6 +1544,42 @@ function toggleErrorPane (visibility) {
   }
 }
 
+function opacity (bright)
+{
+  return (bright ? 0.8 : 0.2);
+}
+
+function processData (response)
+{
+  try {
+    var data = JSON.parse(response);
+
+    document.getElementById("mono").style.opacity = opacity((data["channels"] != 2));
+    document.getElementById("stereo").style.opacity = opacity((data["channels"] == 2));
+    document.getElementById("hz44100").style.opacity = opacity((data["rate"] == 44100));
+    document.getElementById("hz48000").style.opacity = opacity((data["rate"] == 48000));
+
+    for (var col = 0; col < 27; col++) {
+      var row;
+      for (row = 0; row < data["left"][col]; row++) {
+        document.getElementById("l" + col + "_" + row).style.opacity = opacity(true);
+      }
+      for (; row < 25; row++) {
+        document.getElementById("l" + col + "_" + row).style.opacity = opacity(false);
+      }
+      for (row = 0; row < data["right"][col]; row++) {
+        document.getElementById("r" + col + "_" + row).style.opacity = opacity(true);
+      }
+      for (; row < 25; row++) {
+        document.getElementById("r" + col + "_" + row).style.opacity = opacity(false);
+      }
+    }
+  } catch (e) {
+    toggleErrorPane("visible");
+console.log(e);
+  }
+}
+
 /* avoid concurrent invocations of reconnect() by onerror/onclose */
 var reconnectID = null;
 
@@ -113,7 +1595,7 @@ function startRequest () {
   var host = window.location.host;
 // XXX
 //  var ws = new WebSocket("ws://" + host + "/json");
-  var ws = new WebSocket("ws://localhost:8083/json");
+  var ws = new WebSocket("ws://" + window.location.search.substring(1) + "/json");
   ws.onerror = function (ev) {
     reconnect();
   };
@@ -124,7 +1606,7 @@ function startRequest () {
     toggleErrorPane(false);
   };
   ws.onmessage = function (ev) {
-    document.getElementById("foo").value = ev.data;
+    processData(ev.data);
   };
 }
 
