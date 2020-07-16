@@ -619,8 +619,9 @@ static char *color_display (int new_display_idx, char *buf)
   *(p - 101) = (sampling_channels == 2 ? '2' : '1');
   *(p - 77) = (sampling_channels == 2 ? '1' : '2');
   *(p - 48) = (sampling_rate == 44100 ? '1' : '2');
-//  *(p - 20) = (sampling_rate == 44100 ? '2' : '1');
-  green_on_black((sampling_rate!=44100), p - 26);
+/*  *(p - 20) = (sampling_rate == 44100 ? '2' : '1');
+  otherwise old_bright will not reflect latest color mode */
+  green_on_black((sampling_rate != 44100), p - 26);
 
   return p;
 }
