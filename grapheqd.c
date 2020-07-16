@@ -1109,7 +1109,8 @@ static void show_help ()
 "grapheqd -h\n"
 "\n"
 "  -a <address>        listen on this address; default: 0.0.0.0\n"
-"  -d                  run in foreground and do not detach from terminal\n"
+"  -d                  run in foreground, and log to stdout/stderr, do not\n"
+"                      detach from terminal, do not log to syslog\n"
 "  -l <port>           listen on this port; default: 8083\n"
 "  -p <pid file>       daemonize and save pid to this file; no default, pid\n"
 "                      gets not written to any file\n"
@@ -1163,10 +1164,10 @@ int main (int argc, char **argv)
   setup_signals();
 
   if (!foreground) {
+    openlog("grapheqd", LOG_NDELAY|LOG_PID, LOG_DAEMON);
     close(0); close(1); close(2);
   }
 
-  openlog("grapheqd", LOG_NDELAY|LOG_PID, LOG_DAEMON);
   log_info("starting...");
 
 #ifdef USE_SYSTEMD
@@ -1186,7 +1187,8 @@ int main (int argc, char **argv)
     unlink(pidfile); /* may fail, e.g. due to changed user privs */
 
   log_info("exiting...");
-  closelog();
+  if (!foreground)
+    closelog();
 
   return 0;
 }
