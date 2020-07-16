@@ -619,7 +619,8 @@ static char *color_display (int new_display_idx, char *buf)
   *(p - 101) = (sampling_channels == 2 ? '2' : '1');
   *(p - 77) = (sampling_channels == 2 ? '1' : '2');
   *(p - 48) = (sampling_rate == 44100 ? '1' : '2');
-  *(p - 20) = (sampling_rate == 44100 ? '2' : '1');
+//  *(p - 20) = (sampling_rate == 44100 ? '2' : '1');
+  green_on_black((sampling_rate!=44100), p - 26);
 
   return p;
 }
@@ -899,8 +900,8 @@ static int read_http (struct client_worker_arg *arg)
 
     if (buf[0] == 'c') {
       log_http(arg, "c", 200);
-      res = write(arg->socket, term_title, sizeof(term_title - 1));
-      if (res == (signed) sizeof(term_title - 1))
+      res = write(arg->socket, term_title, sizeof(term_title) - 1);
+      if (res == (signed) sizeof(term_title) - 1)
         start_display(arg, &color_display);
       return 1;
     }

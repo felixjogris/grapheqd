@@ -1,15 +1,136 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN">
 <html>
 <head>
 <title>grapheqd</title>
-<script>
-var host = window.location.host;
-var ws = new WebSocket("ws://" + host + "/json");
-ws.onmessage = function (ev) {
-  document.getElementById("foo").value = ev.data;
-};
-</script>
+<meta name="viewport" content="width=device-width">
+<style type="text/css">
+body {
+  font-family:sans-serif;
+  font-size:250%;
+  color:white;
+  padding:0;
+  margin:0;
+  background-color:black;
+  height:90vh;
+}
+#errorPane {
+  width:100%;
+  height:100%;
+  position:absolute;
+  top:0;
+  left:0;
+  opacity:0.1;
+  background-color:#ccc;
+  visibility:hidden;
+  padding:0;
+  margin:0;
+  z-index:998;
+}
+#errorText {
+  width:100%;
+  position:absolute;
+  top:50%;
+  left:0;
+  text-align:center;
+  vertical-align:middle;
+  opacity:1;
+  background-color:red;
+  visibility:hidden;
+  color:white;
+  font-weight:bold;
+  font-size:large;
+  padding:0.1em 0em 0.1em 0em;
+  margin:0;
+  z-index:999;
+}
+#grapheqd {
+  width:90%;
+  height:100%;
+  margin:0 auto 0 auto;
+border:1px solid red;
+}
+#status {
+  width:100%;
+  height:10%;
+  color:darkcyan;
+border:1px solid red;
+}
+#about {
+  width:100%;
+  text-align:center;
+  white-space:nowrap;
+  margin-top:10%;
+  font-size:50%;
+border:1px solid red;
+}
+a {
+  color:darkcyan;
+}
+</style>
 </head>
 <body>
+<div id="grapheqd">
 <textarea id="foo" cols="100" rows="30"></textarea>
+<div style="width:20px;height:10px;background-color:cyan;opacity:0.7"></div>
+<div id="status">
+<span id="mono">Mono</span>
+<span id="stereo">Stereo</span>
+<span id="hz44100">44100 Hz</span>
+<span id="hz48000">48000 Hz</span>
+</div>
+<div id="about">
+<a href="https://ogris.de/grapheqd/" target="_blank">grapheqd</a>
+</div>
+</div>
+
+<div id="errorPane"></div>
+<div id="errorText">Connection lost!</div>
+
+<script>
+<!--
+
+function toggleErrorPane (visibility) {
+  var errorPane = document.getElementById("errorPane");
+
+  if (errorPane.style.visibility != visibility) {
+    errorPane.style.visibility = visibility;
+    document.getElementById("errorText").style.visibility = visibility;
+  }
+}
+
+/* avoid concurrent invocations of reconnect() by onerror/onclose */
+var reconnectID = null;
+
+function reconnect () {
+  if (reconnectID == null) {
+    reconnectID = window.setTimeout(startRequest, 1000);
+    toggleErrorPane(true);
+  }
+}
+
+function startRequest () {
+  reconnectID = null;
+  var host = window.location.host;
+// XXX
+//  var ws = new WebSocket("ws://" + host + "/json");
+  var ws = new WebSocket("ws://localhost:8083/json");
+  ws.onerror = function (ev) {
+    reconnect();
+  };
+  ws.onclose = function (ev) {
+    reconnect();
+  };
+  ws.onopen = function (ev) {
+    toggleErrorPane(false);
+  };
+  ws.onmessage = function (ev) {
+    document.getElementById("foo").value = ev.data;
+  };
+}
+
+startRequest();
+
+-->
+</script>
 </body>
 </html>
