@@ -60,7 +60,7 @@ a {
   padding-top:10%;
 }
 .channel {
-  width:50%;
+  width:49%;
   height:100%;
   display:inline-block;
 }
@@ -837,7 +837,7 @@ a {
 <span id="mono">Mono</span>
 <span id="stereo">Stereo</span>
 </div>
-</div><div class="channel">
+</div><div class="channel" style="float:right">
 <div class="band">
 <div id="right0_24" class="bar"></div>
 <div id="right0_23" class="bar"></div>
@@ -1677,8 +1677,6 @@ function startRequest () {
   is_first_response = true;
 
   var host = window.location.host;
-/* XXX */
-host = window.location.search.substring(1);
   var ws = new WebSocket("ws://" + host + "/json");
 
   ws.onerror = function (ev) {
