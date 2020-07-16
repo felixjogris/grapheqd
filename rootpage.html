@@ -19,7 +19,7 @@ body {
   position:absolute;
   top:0;
   left:0;
-  opacity:0.1;
+  opacity:0.3;
   background-color:#ccc;
   visibility:hidden;
   padding:0;
@@ -1668,7 +1668,7 @@ function processData (response)
 function reconnect () {
   if (reconnectID == null) {
     reconnectID = window.setTimeout(startRequest, 1000);
-    toggleErrorPane(true);
+    toggleErrorPane("visible");
   }
 }
 
@@ -1688,7 +1688,7 @@ function startRequest () {
   };
 
   ws.onopen = function (ev) {
-    toggleErrorPane(false);
+    toggleErrorPane("hidden");
   };
 
   ws.onmessage = function (ev) {
