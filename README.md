@@ -48,18 +48,22 @@ grapheqd -h
 ### Requirements
 
 * KISS FFT by Mark Borgerding to convert PCM data from time to frequency domain
+
   By default, the grapheqd build process expects a copy of KISS FFT in the directory ../kissfft. You can specify another directory by passing *KISSFFT=/some/other/directory* to *make*. To fetch a copy of KISS FFT, issue this from within the grapheqd directory:
   `git clone https://github.com/mborgerding/kissfft.git ../kissfft`
 
 * ALSA library and headers to access your audio device and to read PCM data
+
   Your Linux distro should have these.
 
 * OpenSSL crypto library and headers for SHA1 hashing of the *Sec-WebSocket-Accept* header when switching protocols
+
   Your Linux distro should have these as well.
 
 * Glibc system library and headers with support for libm for mathematical routines and pthreads for threads, mutexes, and conditions. Any other libc might do as well, but has not been tested yet.
 
 * C compiler. I tested with GCC version 10.1.0 and Clang/LLVM 10.0.0.
+
   For cross compiling you can pass *CC* to *make*, e.g. `make CC=mips-openwrt-linux-gcc`
 
 * GNU make or any other compatible make.
@@ -84,4 +88,10 @@ I am putting an official release as .tar.bz2 with proper RC scripts to https://o
 
 ## Under the hood
 
-Per channel, grapheqd passes 4096 16 bit audio samples (mono or stereo) at a time to FFT, and pushes calculated linear frequency data to all connected clients, thus resulting in roughly 11 or 12 updates per second if your hardware supports sampling at 44100 or 48000 Hz, respectively. The web interface adjusts the labels under each band (vertical bar) to match its frequency range. If only mono audio is available, then the FFT is called just once per loop, while the output data is duplicated. If no client is connected, then no PCM data is read and FFT does not burn CPU cycles unnecessarily. The internal web serving routines (to put it nicely) use static and predetermined buffers where possible. printf() and family are not used in the hot code paths and loops.
+Per channel, grapheqd passes 4096 16 bit audio samples (mono or stereo) at a time to FFT, and pushes calculated linear frequency data to all connected clients, thus resulting in roughly 11 or 12 updates per second if your hardware supports sampling at 44100 or 48000 Hz, respectively. The web interface adjusts the labels under each band (vertical bar) to match its frequency range. If only mono audio is available, then the FFT is called just once per loop, while the output data is duplicated. If no client is connected, then no PCM data is read and FFT does not burn CPU cycles unnecessarily.
+
+The internal web serving routines (to put it nicely) use static and predetermined buffers where possible. printf() and family are not used in the hot code paths and loops.
+
+## Homepage
+
+https://ogris.de/grapheqd/
