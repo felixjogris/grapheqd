@@ -31,7 +31,12 @@ binmode($fh) || die "$hfile: binmode(): $!";
 
 print $fh "char $var_name\[\] = { ";
 while ($data =~ s/^(.)//ms) {
-  print $fh sprintf("0x%02hx,", ord($1));
+  my $char = $1;
+  print $fh sprintf("0x%02hx", ord($char));
+  if ($data ne "") {
+    print $fh ",";
+    print $fh "\n" if ($char eq "\n");
+  }
 }
 print $fh " };\n";
 

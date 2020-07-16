@@ -59,10 +59,6 @@ a {
   margin:0 auto 0 auto;
   padding-top:10%;
 }
-#matrix {
-  width:100%;
-  height:100%;
-}
 .channel {
   width:50%;
   height:100%;
@@ -82,7 +78,7 @@ a {
   background-color:cyan;
   opacity:0.2;
 }
-#status {
+.status {
   width:100%;
   margin-top:2%;
   text-align:center;
@@ -91,23 +87,16 @@ a {
   color:cyan;
   opacity:0.2;
 }
-#mono, #hz48000 {
-  margin-left:5%;
-  margin-right:5%;
-}
-#stereo {
-  margin-left:5%;
+#mono, #hz44100 {
   margin-right:10%;
 }
-#hz44100 {
+#stereo, #hz48000 {
   margin-left:10%;
-  margin-right:5%;
 }
 </style>
 </head>
 <body>
 <div id="grapheqd">
-<div id="matrix">
 <div class="channel">
 <div class="band">
 <div id="l0_24" class="bar"></div>
@@ -811,6 +800,10 @@ a {
 <div id="l26_2" class="bar"></div>
 <div id="l26_1" class="bar"></div>
 <div id="l26_0" class="bar"></div>
+</div>
+<div class="status">
+<span id="mono">Mono</span>
+<span id="stereo">Stereo</span>
 </div>
 </div><div class="channel">
 <div class="band">
@@ -1516,13 +1509,10 @@ a {
 <div id="r26_1" class="bar"></div>
 <div id="r26_0" class="bar"></div>
 </div>
-</div>
-</div>
-<div id="status">
-<span id="mono">Mono</span>
-<span id="stereo">Stereo</span>
+<div class="status">
 <span id="hz44100">44100 Hz</span>
 <span id="hz48000">48000 Hz</span>
+</div>
 </div>
 <div id="about">
 <a href="https://ogris.de/grapheqd/" target="_blank">grapheqd</a>
