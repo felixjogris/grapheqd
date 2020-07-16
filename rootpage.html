@@ -1611,7 +1611,7 @@ function labelChannel (rate, channel)
 
   for (var col = 0; col < 27; col++) {
     var elemID = channel + col + "hz";
-    var freq = (buckets[col] + 1) * rate / 1024;
+    var freq = (buckets[col] + 1) * rate / 2048;
 
     if (freq < 1000)
       freq = Math.floor(freq);
