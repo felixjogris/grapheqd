@@ -4,6 +4,9 @@ KISSFFT ?= ../kissfft
 ifdef USE_SYSTEMD
   CFLAGS += -DUSE_SYSTEMD
 endif
+ifdef BUILD_ROOT
+  CFLAGS += -I$(BUILD_ROOT)/usr/include -L$(BUILD_ROOT)/usr/lib
+endif
 
 .PHONY:	clean
 

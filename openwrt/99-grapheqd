@@ -1,0 +1,6 @@
+#!/bin/sh
+
+if [ "$ACTION" = "bind" -a "$DRIVER" = "snd-usb-audio" ]; then
+  logger -t grapheqd -p daemon.info "Hotplug starting grapheqd"
+  /etc/init.d/grapheqd start
+fi

@@ -619,8 +619,8 @@ static char *color_display (int new_display_idx, char *buf)
   *(p - 101) = (sampling_channels == 2 ? '2' : '1');
   *(p - 77) = (sampling_channels == 2 ? '1' : '2');
   *(p - 48) = (sampling_rate == 44100 ? '1' : '2');
-/*  *(p - 20) = (sampling_rate == 44100 ? '2' : '1');
-  otherwise old_bright will not reflect latest color mode */
+  *(p - 20) = (sampling_rate == 44100 ? '2' : '1');
+  /* otherwise old_bright will not reflect latest color mode */
   green_on_black((sampling_rate != 44100), p - 26);
 
   return p;
@@ -1039,6 +1039,7 @@ static snd_pcm_t *open_alsa (const char *soundcard)
   snd_pcm_t *handle;
   snd_pcm_hw_params_t *params;
   int err;
+  snd_pcm_format_t format;
 
   err = snd_pcm_open(&handle, soundcard, SND_PCM_STREAM_CAPTURE, 0);
   if (err)
@@ -1060,8 +1061,15 @@ static snd_pcm_t *open_alsa (const char *soundcard)
 
   err = snd_pcm_hw_params_set_format(handle, params, SAMPLING_FORMAT);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_format("
-                      STR(SAMPLING_WIDTH*2) ")", snd_strerror(err));
+    warnx("%s: %s", "snd_pcm_hw_params_set_format(" STR(SAMPLING_WIDTH) ")",
+                    snd_strerror(err));
+
+  err = snd_pcm_hw_params_get_format(params, &format);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_get_format()", snd_strerror(err));
+
+  if (format != SAMPLING_WIDTH)
+    errx(1, "sampling format is %i, not " STR(SAMPLING_FORMAT), format);
 
   sampling_channels = 2;
   err = snd_pcm_hw_params_set_channels(handle, params, 2);
