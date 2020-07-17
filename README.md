@@ -50,6 +50,7 @@ grapheqd -h
 * KISS FFT by Mark Borgerding to convert PCM data from time to frequency domain
 
   By default, the grapheqd build process expects a copy of KISS FFT in the directory ../kissfft. You can specify another directory by passing *KISSFFT=/some/other/directory* to *make*. To fetch a copy of KISS FFT, issue this from within the grapheqd directory:
+
   `git clone https://github.com/mborgerding/kissfft.git ../kissfft`
 
 * ALSA library and headers to access your audio device and to read PCM data
@@ -70,21 +71,27 @@ grapheqd -h
 
 ### Build
 
-1. For now, clone this repository:
+1. Either clone this repository:
 
    `git clone https://github.com/felixjogris/grapheqd.git`
+
+   or grab an official release from https://ogris.de/grapheqd/
 
 2. If you haven't fetched KISS FFT yet, do it now:
 
    `git clone https://github.com/mborgerding/kissfft.git ../kissfft`
 
-3. Call `make`.
+3. Call `make`. It will fetch KISS FFT automatically if you haven't done it, and will compile everything.
 
 4. Optionally, if you want systemd integration, call *make* with *USE_SYSTEMD=1*
 
-5. You now have *grapheqd* in the current directory. Either call it directly, or copy it to */usr/local/bin* and add it to your RC init or systemd configuration.
+5. You now have *grapheqd* in the current directory. Either call it directly, copy it somewhere, or run `sudo make install`, which will place it to */usr/local/sbin*. Then either add it to your RC init or systemd configuration, or use the provided scripts `grapheqd.service` or `grapheqd.openrc`, which `make install` has copied to `/lib/systemd/system` or `/etc/init.d`, respectively.
 
-I am putting an official release as .tar.bz2 with proper RC scripts to https://ogris.de/grapheqd/ as soon as I finish OpenWRT integration.
+### OpenWRT
+
+Create a directory *package/grapheqd* inside your copy of the OpenWRT source tree, and download https://ogris.de/grapheqd/openwrt/Makefile to that directory. Now run `make menuconfig`, and under *Multimedia* select *grapheqd*. Optionally, select *kmod-usb-audio* under *Kernel modules* -> *Sound Support*. Then build OpenWRT as usual, e.g. by calling `make`.
+
+(blob/master/openwrt/Makefile) is a copy of that Makefile.
 
 ## Under the hood
 
