@@ -47,7 +47,7 @@ grapheqd -h
 
 ### Requirements
 
-* KISS FFT by Mark Borgerding to convert PCM data from time to frequency domain
+* KISS FFT by Mark Borgerding (@mborgerding) to convert PCM data from time to frequency domain
 
   By default, the grapheqd build process expects a copy of KISS FFT in the directory ../kissfft. You can specify another directory by passing *KISSFFT=/some/other/directory* to *make*. To fetch a copy of KISS FFT, issue this from within the grapheqd directory:
 
@@ -91,7 +91,7 @@ grapheqd -h
 
 Create a directory *package/grapheqd* inside your copy of the OpenWRT source tree, and download https://ogris.de/grapheqd/openwrt/Makefile to that directory. Now run `make menuconfig`, and under *Multimedia* select *grapheqd*. Optionally, select *kmod-usb-audio* under *Kernel modules* -> *Sound Support*. Then build OpenWRT as usual, e.g. by calling `make`.
 
-(blob/master/openwrt/Makefile) is a copy of that Makefile.
+[openwrt/Makefile](blob/master/openwrt/Makefile) is a copy of that Makefile.
 
 ## Under the hood
 
