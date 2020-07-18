@@ -38,13 +38,19 @@
 
 #define log_error(fmt, params ...) do { \
   if (foreground) warnx(fmt "\n", ## params); \
-  syslog(LOG_ERR, "%s (%s:%i): " fmt "\n", \
-         __FUNCTION__, __FILE__, __LINE__, ## params); \
+  else syslog(LOG_ERR, "%s (%s:%i): " fmt "\n", \
+              __FUNCTION__, __FILE__, __LINE__, ## params); \
+} while (0)
+
+#define log_warn(fmt, params ...) do { \
+  if (foreground) warnx(fmt "\n", ## params); \
+  else syslog(LOG_WARNING, "%s (%s:%i): " fmt "\n", \
+              __FUNCTION__, __FILE__, __LINE__, ## params); \
 } while (0)
 
 #define log_info(fmt, params ...) do { \
   if (foreground) printf(fmt "\n", ## params); \
-  syslog(LOG_INFO, fmt "\n", ## params); \
+  else syslog(LOG_INFO, fmt "\n", ## params); \
 } while (0)
 
 /* integer to string by preprocessor */
@@ -77,7 +83,7 @@ static int sampling_channels;
 
 /* used by main() and sigterm_handler() */
 static int running = 1;
-/* used by main() and log_error() macro */
+/* used by main() and log_*() macros */
 static int foreground = 0;
 
 static void sigterm_handler (int sig __attribute__((unused)))
@@ -407,7 +413,7 @@ static void *fft_worker (void *arg0)
   res = pthread_mutex_lock(&fft_mtx);
   if (res) {
     log_error("cannot lock fft mutex: %s", strerror(res));
-    return NULL;
+    goto ERROR;
   }
 
   while (running) {
@@ -437,6 +443,9 @@ static void *fft_worker (void *arg0)
   if (res)
     log_error("cannot unlock fft mutex: %s", strerror(res));
 
+ERROR:
+  running = 0;
+
   return NULL;
 }
 
@@ -460,8 +469,8 @@ static int pcm_worker_loop (snd_pcm_t *soundhandle)
     }
 
     if (num_frames != FFT_SIZE) {
-      log_error("read %li bytes of pcm data instead of %i", num_frames,
-                FFT_SIZE);
+      log_warn("read %li bytes of pcm data instead of %i", num_frames,
+               FFT_SIZE);
     }
 
     pcm_idx = 1 - pcm_idx;
@@ -487,7 +496,7 @@ static void *pcm_worker (void *arg0)
   res = pthread_mutex_lock(&pcm_mtx);
   if (res) {
     log_error("cannot lock pcm mutex: %s", strerror(res));
-    return NULL;
+    goto ERROR;
   }
 
   while (running) {
@@ -506,6 +515,9 @@ static void *pcm_worker (void *arg0)
   if (res)
     log_error("cannot unlock pcm mutex: %s", strerror(res));
 
+ERROR:
+  running = 0;
+
   return NULL;
 }
 
@@ -515,7 +527,7 @@ static int count_client (int i)
 
   res = pthread_mutex_lock(&num_mtx);
   if (res) {
-    log_error("cannot lock num_clients mutex: %s", strerror(res));
+    log_warn("cannot lock num_clients mutex: %s", strerror(res));
     return res;
   }
 
@@ -523,7 +535,7 @@ static int count_client (int i)
 
   res = pthread_mutex_unlock(&num_mtx);
   if (res)
-    log_error("cannot unlock num_clients mutex: %s", strerror(res));
+    log_warn("cannot unlock num_clients mutex: %s", strerror(res));
 
   return res;
 }
@@ -668,26 +680,26 @@ static void start_display (struct client_worker_arg *arg,
     /* wake up pcm thread */
     res = pthread_cond_signal(&pcm_cond);
     if (res) {
-      log_error("cannot signal pcm condition: %s", strerror(res));
+      log_warn("cannot signal pcm condition: %s", strerror(res));
       return;
     }
 
     res = pthread_mutex_lock(&display_mtx);
     if (res) {
-      log_error("cannot lock display mutex: %s", strerror(res));
+      log_warn("cannot lock display mutex: %s", strerror(res));
       return;
     }
 
     /* wait for fft thread to wake us up */
     res = pthread_cond_wait(&display_cond, &display_mtx);
     if (res) {
-      log_error("cannot wait for display condition: %s", strerror(res));
+      log_warn("cannot wait for display condition: %s", strerror(res));
       return;
     }
 
     res = pthread_mutex_unlock(&display_mtx);
     if (res) {
-      log_error("cannot unlock display mutex: %s", strerror(res));
+      log_warn("cannot unlock display mutex: %s", strerror(res));
       return;
     }
 
@@ -979,7 +991,7 @@ static int create_client_worker (int listen_socket)
   } while ((arg->socket < 0) && (errno == EINTR));
 
   if (arg->socket < 0) {
-    log_error("accept(): %s", strerror(errno));
+    log_warn("accept(): %s", strerror(errno));
     free(arg);
     return 0;
   }
@@ -987,15 +999,19 @@ static int create_client_worker (int listen_socket)
   yes = 1;
   res = setsockopt(arg->socket, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
   if (res != 0) {
-    log_error("cannot set keepalive for client socket: %s", strerror(res));
+    log_warn("cannot set keepalive for client socket: %s", strerror(res));
     close(arg->socket);
     free(arg);
     return 0;
   }
 
   res = pthread_create(&thread, NULL, &client_worker, arg);
-  if (res != 0)
+  if (res != 0) {
     log_error("cannot create client worker thread: %s", strerror(res));
+    close(arg->socket);
+    free(arg);
+    return res;
+  }
 
   return res;
 }
