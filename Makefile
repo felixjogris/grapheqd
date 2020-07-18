@@ -8,7 +8,7 @@ ifdef BUILD_ROOT
   CFLAGS += -I$(BUILD_ROOT)/usr/include -L$(BUILD_ROOT)/usr/lib
 endif
 
-.PHONY:	clean install foo
+.PHONY:	clean install package
 
 grapheqd:	grapheqd.c rootpage.h favicon.h \
                 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
@@ -29,5 +29,18 @@ install:	grapheqd
 	install -d /usr/local/sbin
 	install grapheqd /usr/local/sbin/
 	install -m 0644 grapheqd.service /lib/systemd/system/ || install -m 0644 grapheqd.openrc /etc/init.d/
+
+package:	clean
+	$(eval VERSION=$(shell awk -F'"' '{if(/define\s+GRAPHEQD_VERSION/){print $$2}}' grapheqd.c))
+	$(eval TMPDIR=$(shell mktemp -d))
+	mkdir $(TMPDIR)/grapheqd-$(VERSION)
+	cp -aiv * $(TMPDIR)/grapheqd-$(VERSION)/
+	tar -C $(TMPDIR) -cvjf $(TMPDIR)/grapheqd-$(VERSION).tar.bz2 grapheqd-$(VERSION)
+	sed -i 's/PKG_VERSION:=.*/PKG_VERSION:=$(VERSION)/; '\
+	's/PKG_SOURCE:=.*/PKG_SOURCE:=grapheqd-$(VERSION).tar.bz2/; '\
+	's/PKG_HASH:=.*/PKG_HASH:='\
+	`sha256sum $(TMPDIR)/grapheqd-$(VERSION).tar.bz2 | awk '{print $$1}'`\
+	'/' openwrt/Makefile
+	sha256sum $(TMPDIR)/grapheqd-$(VERSION).tar.bz2
 
 clean: ;	-rm -v grapheqd
