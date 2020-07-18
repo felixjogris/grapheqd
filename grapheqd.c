@@ -37,15 +37,21 @@
 #define FFT_SIZE 4096    /* must be power of 2   */
 
 #define log_error(fmt, params ...) do { \
-  if (foreground) warnx(fmt "\n", ## params); \
-  else syslog(LOG_ERR, "%s (%s:%i): " fmt "\n", \
-              __FUNCTION__, __FILE__, __LINE__, ## params); \
+  if (foreground) \
+    warnx("%s (%s:%i): " fmt, \
+          __FUNCTION__, __FILE__, __LINE__, ## params); \
+  else \
+    syslog(LOG_ERR, "%s (%s:%i): " fmt "\n", \
+           __FUNCTION__, __FILE__, __LINE__, ## params); \
 } while (0)
 
 #define log_warn(fmt, params ...) do { \
-  if (foreground) warnx(fmt "\n", ## params); \
-  else syslog(LOG_WARNING, "%s (%s:%i): " fmt "\n", \
-              __FUNCTION__, __FILE__, __LINE__, ## params); \
+  if (foreground) \
+    warnx("%s (%s:%i): " fmt, \
+          __FUNCTION__, __FILE__, __LINE__, ## params); \
+  else \
+    syslog(LOG_WARNING, "%s (%s:%i): " fmt "\n", \
+           __FUNCTION__, __FILE__, __LINE__, ## params); \
 } while (0)
 
 #define log_info(fmt, params ...) do { \
