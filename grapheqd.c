@@ -87,14 +87,16 @@ static pthread_mutex_t num_mtx = PTHREAD_MUTEX_INITIALIZER;
 static int sampling_rate;
 static int sampling_channels;
 
-/* used by main() and sigterm_handler() */
+/* used by main() and quitterm_handler() */
 static int running = 1;
 /* used by main() and log_*() macros */
 static int foreground = 0;
 
-static void sigterm_handler (int sig __attribute__((unused)))
+static void quitterm_handler (int sig)
 {
-  log_info("SIGTERM received, going down...");
+  if (sig == SIGTERM)
+    log_info("SIGTERM received, going down...");
+
   running = 0;
 }
 
@@ -116,12 +118,16 @@ static void setup_signals ()
     err(1, "sigfillset()");
 
   if (sigdelset(&sigset, SIGTERM) != 0)
-    err(1, "sigdelset()");
+    err(1, "sigdelset(SIGTERM)");
+
+  if (sigdelset(&sigset, SIGQUIT) != 0)
+    err(1, "sigdelset(SIGQUIT)");
 
   if (pthread_sigmask(SIG_SETMASK, &sigset, NULL) != 0)
     err(1, "pthread_sigmask()");
 
-  setup_signal(SIGTERM, sigterm_handler);
+  setup_signal(SIGTERM, quitterm_handler);
+  setup_signal(SIGQUIT, quitterm_handler);
 }
 
 static struct passwd *get_user (const char *username)
@@ -450,7 +456,7 @@ static void *fft_worker (void *arg0)
     log_error("cannot unlock fft mutex: %s", strerror(res));
 
 ERROR:
-  running = 0;
+  kill(getpid(), SIGQUIT);
 
   return NULL;
 }
@@ -522,7 +528,7 @@ static void *pcm_worker (void *arg0)
     log_error("cannot unlock pcm mutex: %s", strerror(res));
 
 ERROR:
-  running = 0;
+  kill(getpid(), SIGQUIT);
 
   return NULL;
 }
