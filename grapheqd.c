@@ -26,14 +26,15 @@
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "1"
+#define GRAPHEQD_VERSION "2"
 
 #define MAX_CHANNELS 2    /* stereo */
 #define SAMPLING_WIDTH 2  /* 16 bit signed per channel per sample */
 #define SAMPLING_FORMAT SND_PCM_FORMAT_S16 /* keep in sync to SAMPLING_WIDTH
                                               and every use of int16_t */
-#define DISPLAY_BANDS 27 /* 27 bands/buckets per channel displayed     */
-#define DISPLAY_BARS 25  /* 25 segments per band */
+#define DISPLAY_BANDS 27 /* 27 horizontal bands/buckets per channel
+                            displayed */
+#define DISPLAY_BARS 25  /* 25 vertical segments per band */
 #define FFT_SIZE 4096    /* must be power of 2   */
 
 #define log_error(fmt, params ...) do { \
@@ -70,6 +71,12 @@ struct client_worker_arg {
   char clientname[INET6_ADDRSTRLEN + 8];
   int socket;
 };
+
+/* a peak value per channel and band within display_buf */
+typedef struct {
+  unsigned char value;
+  char duration;
+} peak;
 
 static int pcm_idx = 0;
 static int16_t pcm_buf[2][FFT_SIZE * MAX_CHANNELS];
@@ -378,7 +385,9 @@ static void fft_mono (kiss_fft_cfg fft_cfg)
   }
 
   fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
-  fill_bands(&llevel, max_level, &display_buf[display_idx][1]);
+
+  for (i = 0; i < DISPLAY_BANDS; i++)
+    display_buf[display_idx][1][i] = display_buf[display_idx][0][i];
 }
 
 static void fft_stereo (kiss_fft_cfg fft_cfg)
@@ -572,25 +581,33 @@ static void int2buf (char *buf, int i, int len)
     *p-- = ' ';
 }
 
-static char *json_display (int new_display_idx, char *buf)
+static char *json_display (int new_display_idx,
+                           peak (*peaks)[MAX_CHANNELS][DISPLAY_BANDS],
+                           char *buf)
 {
   char *p = buf;
   int col;
-  const char ws_json[] = "\x81\x7e\x0\xd3"
+  const char ws_json[] = "\x81\x7e\x1\x92"
                          "{\"rate\":44100,\"channels\":2,\n"
                          "\"left\":[25,25,25,25,25,25,25,25,25,25,25,25,"
                          "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25],\n"
                          "\"right\":[25,25,25,25,25,25,25,25,25,25,25,25,"
+                         "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25],\n"
+                         "\"peakleft\":[25,25,25,25,25,25,25,25,25,25,25,25,"
+                         "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25],\n"
+                         "\"peakright\":[25,25,25,25,25,25,25,25,25,25,25,25,"
                          "25,25,25,25,25,25,25,25,25,25,25,25,25,25,25]}\n";
 
   p = str2buf(p, ws_json, sizeof(ws_json));
 
-  int2buf(p - 199, sampling_rate, 5);
-  int2buf(p - 186, sampling_channels, 1);
+  int2buf(p - 390, sampling_rate, 5);
+  int2buf(p - 377, sampling_channels, 1);
 
   for (col = 0; col < DISPLAY_BANDS; col++) {
-    int2buf(p - 174 + col * 3, display_buf[new_display_idx][0][col], 2);
-    int2buf(p - 82 + col * 3, display_buf[new_display_idx][1][col], 2);
+    int2buf(p - 365 + col * 3, display_buf[new_display_idx][0][col], 2);
+    int2buf(p - 273 + col * 3, display_buf[new_display_idx][1][col], 2);
+    int2buf(p - 178 + col * 3, (*peaks)[0][col].value, 2);
+    int2buf(p - 82 + col * 3, (*peaks)[1][col].value, 2);
   }
 
   return p;
@@ -611,7 +628,9 @@ static char *green_on_black (char bright, char *buf)
   return p;
 }
 
-static char *color_display (int new_display_idx, char *buf)
+static char *color_display (int new_display_idx,
+                            peak (*peaks)[MAX_CHANNELS][DISPLAY_BANDS],
+                            char *buf)
 {
   char *p = buf;
   int row, col;
@@ -624,7 +643,8 @@ static char *color_display (int new_display_idx, char *buf)
     *p++ = '\n';
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
-      int bright = (display_buf[new_display_idx][0][col] >= row);
+      int bright = (display_buf[new_display_idx][0][col] >= row) ||
+                   ((*peaks)[0][col].value == row);
       p = green_on_black(bright, p);
       *p++ = '=';
     }
@@ -633,7 +653,8 @@ static char *color_display (int new_display_idx, char *buf)
     *p++ = ' ';
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
-      int bright = (display_buf[new_display_idx][1][col] >= row);
+      int bright = (display_buf[new_display_idx][1][col] >= row) ||
+                   ((*peaks)[1][col].value == row);
       p = green_on_black(bright, p);
       *p++ = '=';
     }
@@ -650,7 +671,9 @@ static char *color_display (int new_display_idx, char *buf)
   return p;
 }
 
-static char *mono_display (int new_display_idx, char *buf)
+static char *mono_display (int new_display_idx,
+                           peak (*peaks)[MAX_CHANNELS][DISPLAY_BANDS],
+                           char *buf)
 {
   char *p = buf;
   int row, col;
@@ -661,9 +684,12 @@ static char *mono_display (int new_display_idx, char *buf)
     *p++ = '\n';
 
     for (col = 0; col < DISPLAY_BANDS; col++) {
-      *(p + col) = (display_buf[new_display_idx][0][col] >= row ? '*' : '.');
+      *(p + col) =
+                ((display_buf[new_display_idx][0][col] >= row) ||
+                 ((*peaks)[0][col].value == row) ? '*' : '.');
       *(p + col + DISPLAY_BANDS + 1) =
-                    (display_buf[new_display_idx][1][col] >= row ? '*' : '.');
+                ((display_buf[new_display_idx][1][col] >= row) ||
+                 ((*peaks)[1][col].value == row) ? '*' : '.');
     }
 
     *(p + DISPLAY_BANDS) = ' ';
@@ -679,14 +705,35 @@ static char *mono_display (int new_display_idx, char *buf)
   return p;
 }
 
+static void calculate_peaks (unsigned char (*display)[DISPLAY_BANDS],
+                             peak (*peaks)[DISPLAY_BANDS])
+{
+  int col;
+
+  for (col = 0; col < DISPLAY_BANDS; col++) {
+    if ((*display)[col] >= (*peaks)[col].value) {
+      (*peaks)[col].value = (*display)[col];
+      (*peaks)[col].duration = 0;
+    } else if ((*peaks)[col].duration >= 5) {
+      (*peaks)[col].value--;
+      (*peaks)[col].duration = 4;
+    } else {
+      (*peaks)[col].duration++;
+    }
+  }
+}
+
 static void start_display (struct client_worker_arg *arg,
-                           char * (*display_func)(int, char *))
+                           char * (*display_func)(int,
+                                        peak (*)[MAX_CHANNELS][DISPLAY_BANDS],
+                                        char *))
 {
   /* color_display needs:
      (25 bars + status line) *
      ((27 bands * 2 channels + space) * 15 chars + newline) = 21476 */
   char buf[21504], *p;
   int res, new_display_idx;
+  peak peaks[MAX_CHANNELS][DISPLAY_BANDS] = { 0 };
 
   while (1) {
     /* wake up pcm thread */
@@ -718,7 +765,10 @@ static void start_display (struct client_worker_arg *arg,
     new_display_idx = display_idx;
     new_display_idx = 1 - new_display_idx;
 
-    p = (*display_func)(new_display_idx, buf);
+    calculate_peaks(&display_buf[new_display_idx][0], &peaks[0]);
+    calculate_peaks(&display_buf[new_display_idx][1], &peaks[1]);
+
+    p = (*display_func)(new_display_idx, &peaks, buf);
 
     if (write(arg->socket, buf, p - buf) != p - buf)
       return;
@@ -821,7 +871,10 @@ static void base64 (char *dst, unsigned char *src, int len)
 }
 
 static void start_websocket(struct client_worker_arg *arg, char *url,
-                           char *ws_key, char * (*display_func)(int, char *))
+                           char *ws_key,
+                           char * (*display_func)(int,
+                                        peak (*)[MAX_CHANNELS][DISPLAY_BANDS],
+                                        char *))
 {
   const char ws_uuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
   const char websocket_header[] = "Upgrade: websocket\r\n"
