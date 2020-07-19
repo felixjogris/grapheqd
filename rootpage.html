@@ -1648,6 +1648,7 @@ function displayChannel (data, channel)
     }
     row = data["peak" + channel][col];
     if (row > 0) {
+      row--;
       document.getElementById(elemID + row).style.opacity = opacity(true);
     }
   }

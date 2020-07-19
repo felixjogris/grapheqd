@@ -307,60 +307,60 @@ static void fill_bands (float (*level)[FFT_SIZE / 2], float max_level,
   /* base values for 2048 fft size at 44100 Hz */
   const int c = FFT_SIZE / 2048;
 
-  /* 21.5 Hz */
-  (*display)[0] = fill_band(level, max_level,  c*0,  c*1);
+  /* 21.5 Hz - filter out DC = 0 Hz */
+  (*display)[0] = fill_band(level, max_level,  c*1,  c*2);
   /* 43 */
-  (*display)[1] = fill_band(level, max_level,  c*1,  c*2);
+  (*display)[1] = fill_band(level, max_level,  c*2,  c*3);
   /* 64.5 */
-  (*display)[2] = fill_band(level, max_level,  c*2,  c*3);
+  (*display)[2] = fill_band(level, max_level,  c*3,  c*4);
   /* 86 */
-  (*display)[3] = fill_band(level, max_level,  c*3,  c*4);
+  (*display)[3] = fill_band(level, max_level,  c*4,  c*5);
   /* 107.5 */
-  (*display)[4] = fill_band(level, max_level,  c*4,  c*5);
+  (*display)[4] = fill_band(level, max_level,  c*5,  c*6);
   /* 129 - 150.5 */
-  (*display)[5] = fill_band(level, max_level,  c*5,  c*7);
+  (*display)[5] = fill_band(level, max_level,  c*6,  c*8);
   /* 172 - 193.5 */
-  (*display)[6] = fill_band(level, max_level,  c*7,  c*9);
+  (*display)[6] = fill_band(level, max_level,  c*8,  c*10);
   /* 215 - 236.5 */
-  (*display)[7] = fill_band(level, max_level,  c*9,  c*11);
+  (*display)[7] = fill_band(level, max_level,  c*10, c*12);
   /* 258 - 301 */
-  (*display)[8] = fill_band(level, max_level,  c*11, c*14);
+  (*display)[8] = fill_band(level, max_level,  c*12, c*16);
   /* 322.5 - 387 */
-  (*display)[9] = fill_band(level, max_level,  c*15, c*18);
+  (*display)[9] = fill_band(level, max_level,  c*16, c*19);
   /* 408.5 - 494.5 */
-  (*display)[10] = fill_band(level, max_level, c*18, c*23);
+  (*display)[10] = fill_band(level, max_level, c*19, c*24);
   /* 473 - 602 */
-  (*display)[11] = fill_band(level, max_level, c*23, c*28);
+  (*display)[11] = fill_band(level, max_level, c*24, c*29);
   /* 623.5 - 795.5*/
-  (*display)[12] = fill_band(level, max_level, c*28, c*37);
+  (*display)[12] = fill_band(level, max_level, c*29, c*38);
   /* 817 - 989 */
-  (*display)[13] = fill_band(level, max_level, c*37, c*46);
+  (*display)[13] = fill_band(level, max_level, c*38, c*47);
   /* 1010.5 - 1225.5 */
-  (*display)[14] = fill_band(level, max_level, c*46, c*57);
+  (*display)[14] = fill_band(level, max_level, c*47, c*58);
   /* 1247 - 1483.5 */
-  (*display)[15] = fill_band(level, max_level, c*57, c*69);
+  (*display)[15] = fill_band(level, max_level, c*58, c*70);
   /* 1505 - 1978 */
-  (*display)[16] = fill_band(level, max_level, c*69, c*92);
+  (*display)[16] = fill_band(level, max_level, c*70, c*93);
   /* 1999.5 - 2472.5 */
-  (*display)[17] = fill_band(level, max_level, c*92, c*115);
+  (*display)[17] = fill_band(level, max_level, c*93, c*116);
   /* 2494 - 3182 */
-  (*display)[18] = fill_band(level, max_level, c*115, c*148);
+  (*display)[18] = fill_band(level, max_level, c*116, c*149);
   /* 3203.5 - 3891.5 */
-  (*display)[19] = fill_band(level, max_level, c*148, c*181);
+  (*display)[19] = fill_band(level, max_level, c*149, c*182);
   /* 3913 - 5075 */
-  (*display)[20] = fill_band(level, max_level, c*181, c*236);
+  (*display)[20] = fill_band(level, max_level, c*182, c*237);
   /* 5095.5 - 6278 */
-  (*display)[21] = fill_band(level, max_level, c*236, c*292);
+  (*display)[21] = fill_band(level, max_level, c*237, c*293);
   /* 6299.5 - 8127 */
-  (*display)[22] = fill_band(level, max_level, c*292, c*378);
+  (*display)[22] = fill_band(level, max_level, c*293, c*379);
   /* 8148.5 - 9976 */
-  (*display)[23] = fill_band(level, max_level, c*378, c*464);
+  (*display)[23] = fill_band(level, max_level, c*379, c*465);
   /* 9997.5 - 12986 */
-  (*display)[24] = fill_band(level, max_level, c*464, c*604);
+  (*display)[24] = fill_band(level, max_level, c*465, c*605);
   /* 13007.5 - 15996 */
-  (*display)[25] = fill_band(level, max_level, c*604, c*744);
+  (*display)[25] = fill_band(level, max_level, c*605, c*745);
   /* 16017.5 - 22050 */
-  (*display)[26] = fill_band(level, max_level, c*744, c*1024);
+  (*display)[26] = fill_band(level, max_level, c*745, c*1024);
 }
 
 static float calculate_power (kiss_fft_cpx fft_out, float *max_level)
