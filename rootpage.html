@@ -1647,7 +1647,9 @@ function displayChannel (data, channel)
       document.getElementById(elemID + row).style.opacity = opacity(false);
     }
     row = data["peak" + channel][col];
-    document.getElementById(elemID + row).style.opacity = opacity(true);
+    if (row > 0) {
+      document.getElementById(elemID + row).style.opacity = opacity(true);
+    }
   }
 }
 
