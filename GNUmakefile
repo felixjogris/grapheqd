@@ -7,19 +7,14 @@ endif
 ifdef BUILD_ROOT
   CFLAGS += -I$(BUILD_ROOT)/usr/include -L$(BUILD_ROOT)/usr/lib
 endif
-ifdef USE_OSS
-  CFLAGS += -DUSE_OSS
-else
-  LDFLAGS += -lasound
-endif
 
 .PHONY:	clean install package
 
 grapheqd:	grapheqd.c rootpage.h favicon.h \
-                $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
+		$(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
 	$(CC) $(CFLAGS) -W -Wall -O3 -s -pipe -I$(KISSFFT) \
         -o $@ grapheqd.c $(KISSFFT)/kiss_fft.c \
-        $(LDFLAGS) -lm -lpthread -lcrypto
+        -lasound -lcrypto -lm -lpthread
 
 rootpage.h:	rootpage.html bin2c.pl
 	perl bin2c.pl rootpage.html "text/html; charset=utf8" rootpage
@@ -32,7 +27,7 @@ $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c: ;	git clone https://github.com/mbor
 install:	grapheqd
 	install -d /usr/local/sbin
 	install grapheqd /usr/local/sbin/
-	install -m 0644 grapheqd.service /lib/systemd/system/ || install -m 0644 grapheqd.openrc /etc/init.d/
+	install -m 0644 grapheqd.service /lib/systemd/system/ || install grapheqd.openrc /etc/init.d/grapheqd
 
 package:	clean
 	$(eval VERSION=$(shell awk -F'"' '{if(/define\s+GRAPHEQD_VERSION/){print $$2}}' grapheqd.c))
