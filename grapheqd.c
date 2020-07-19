@@ -33,12 +33,10 @@
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "2"
+#define GRAPHEQD_VERSION "3"
 
-#define MAX_CHANNELS 2    /* stereo */
-#define SAMPLING_WIDTH 2  /* 16 bit signed per channel per sample */
-#define SAMPLING_FORMAT SND_PCM_FORMAT_S16 /* keep in sync to SAMPLING_WIDTH
-                                              and every use of int16_t */
+#define MAX_CHANNELS 2   /* stereo */
+#define SAMPLING_WIDTH 2 /* 16 bit signed LE per channel per sample */
 #define DISPLAY_BANDS 27 /* 27 horizontal bands/buckets per channel
                             displayed */
 #define DISPLAY_BARS 25  /* 25 vertical segments per band */
@@ -1190,20 +1188,22 @@ static int *open_sound (const char *soundcard)
   sampling_channels = 2;
   res = ioctl(*fd, SNDCTL_DSP_CHANNELS, &sampling_channels);
   if (res == -1) {
+    warn("SNDCTL_DSP_CHANNELS(2)");
     sampling_channels = 1;
     res = ioctl(*fd, SNDCTL_DSP_CHANNELS, &sampling_channels);
   }
   if (res == -1)
-    err(1, "SNDCTL_DSP_CHANNELS(2 or 1)");
+    err(1, "SNDCTL_DSP_CHANNELS(1)");
 
   sampling_rate = 44100;
   res = ioctl(*fd, SNDCTL_DSP_SPEED, &sampling_rate);
   if (res == -1) {
+    warn("SNDCTL_DSP_SPEED(44100)");
     sampling_rate = 48000;
     res = ioctl(*fd, SNDCTL_DSP_SPEED, &sampling_rate);
   }
   if (res == -1)
-    err(1, "SNDCTL_DSP_SPEED(44100 or 48000)");
+    err(1, "SNDCTL_DSP_SPEED(48000)");
 
   return fd;
 }
@@ -1220,7 +1220,6 @@ static void *open_sound (const char *soundcard)
   snd_pcm_t *handle;
   snd_pcm_hw_params_t *params;
   int err;
-  snd_pcm_format_t format;
 
   if (!soundcard)
     soundcard = "hw:0";
@@ -1231,58 +1230,51 @@ static void *open_sound (const char *soundcard)
 
   err = snd_pcm_hw_params_malloc(&params);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_alloca()", snd_strerror(err));
+    errx(1, "snd_pcm_hw_params_alloca(): %s", snd_strerror(err));
 
   err = snd_pcm_hw_params_any(handle, params);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_any()", snd_strerror(err));
+    errx(1, "snd_pcm_hw_params_any(): %s", snd_strerror(err));
 
   err = snd_pcm_hw_params_set_access(handle, params,
                                      SND_PCM_ACCESS_RW_INTERLEAVED);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_access(INTERLEAVED)",
-                      snd_strerror(err));
+    errx(1, "snd_pcm_hw_params_set_access(INTERLEAVED): %s",
+            snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_format(handle, params, SAMPLING_FORMAT);
+  err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S16);
   if (err)
-    warnx("%s: %s", "snd_pcm_hw_params_set_format(" STR(SAMPLING_WIDTH) ")",
-                    snd_strerror(err));
-
-  err = snd_pcm_hw_params_get_format(params, &format);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_get_format()", snd_strerror(err));
-
-  if (format != SAMPLING_WIDTH)
-    errx(1, "sampling format is %i, not " STR(SAMPLING_FORMAT), format);
+    warnx("snd_pcm_hw_params_set_format(SND_PCM_FORMAT_S16): %s",
+          snd_strerror(err));
 
   sampling_channels = 2;
   err = snd_pcm_hw_params_set_channels(handle, params, 2);
   if (err) {
+    warnx("snd_pcm_hw_params_set_channels(2): %s", snd_strerror(err));
     sampling_channels = 1;
     err = snd_pcm_hw_params_set_channels(handle, params, 1);
   }
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_channels(2 or 1)",
-                      snd_strerror(err));
+    errx(1, "snd_pcm_hw_params_set_channels(1): %s", snd_strerror(err));
 
   sampling_rate = 44100;
   err = snd_pcm_hw_params_set_rate(handle, params, 44100, 0);
   if (err) {
+    warnx("snd_pcm_hw_params_set_rate(44100): %s", snd_strerror(err));
     sampling_rate = 48000;
     err = snd_pcm_hw_params_set_rate(handle, params, 48000, 0);
   }
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_rate(44100 or 48000)",
-                      snd_strerror(err));
+    errx(1, "snd_pcm_hw_params_set_rate(48000): %s", snd_strerror(err));
 
   err = snd_pcm_hw_params_set_period_size(handle, params, FFT_SIZE, 0);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) ")",
-                      snd_strerror(err));
+    errx(1, "snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) "): %s",
+            snd_strerror(err));
 
   err = snd_pcm_hw_params(handle, params);
   if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params()", snd_strerror(err));
+    errx(1, "snd_pcm_hw_params(): %s", snd_strerror(err));
 
   snd_pcm_hw_params_free(params);
 
