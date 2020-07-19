@@ -89,13 +89,17 @@ static pthread_mutex_t pcm_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pcm_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t fft_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t fft_cond = PTHREAD_COND_INITIALIZER;
+static pthread_mutex_t raw_mtx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t raw_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t display_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t display_cond = PTHREAD_COND_INITIALIZER;
 static int display_idx = 0;
 static unsigned char display_buf[2][MAX_CHANNELS][DISPLAY_BANDS];
 static int num_clients = 0;
+static int raw_clients = 0;
 static pthread_mutex_t num_mtx = PTHREAD_MUTEX_INITIALIZER;
-/* set by alsa_open() */
+static pthread_mutex_t raw_num_mtx = PTHREAD_MUTEX_INITIALIZER;
+/* set by open_sound() */
 static int sampling_rate;
 static int sampling_channels;
 
@@ -150,6 +154,64 @@ static struct passwd *get_user (const char *username)
     errx(1, "no such user: %s", username);
 
   return pw;
+}
+
+static int *create_client_socket_inet (const char *host_or_ip, const char *service_or_port)
+{
+  int *client_socket, yes, res;
+  struct addrinfo hints, *result, *walk;
+
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_flags = 0;
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+
+  if ((res = getaddrinfo(host_or_ip, service_or_port, &hints, &result)) != 0) {
+    errx(1, "getaddrinfo(): %s", gai_strerror(res));
+//    return -1;
+  }
+
+  client_socket = malloc(sizeof(*client_socket));
+  if (!client_socket)
+    errx(1, "malloc(): out of memory");
+
+  for (walk = result;;) {
+    *client_socket = socket(walk->ai_family, walk->ai_socktype, 0);
+    if (*client_socket < 0)
+      continue;
+
+    yes = 1;
+    res = setsockopt(*client_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
+                     sizeof(yes));
+    if (res != 0) {
+      close(*client_socket);
+      continue;
+    }
+    
+    if (connect(*client_socket, walk->ai_addr, walk->ai_addrlen) == 0)
+      break;
+
+    walk = walk->ai_next;
+    if (!walk) {
+      err(1, "connect()");
+//      return -1;
+    }
+
+    close(*client_socket);
+  }
+
+  freeaddrinfo(result);
+
+write(*client_socket, "r", 1);
+{
+char buf[8];
+sampling_channels = 1;
+sampling_rate = 48000;
+read(*client_socket, buf, sizeof(sampling_channels));
+read(*client_socket, buf, sizeof(sampling_rate));
+}
+
+  return client_socket;
 }
 
 static int create_listen_socket_inet (const char *ip, const char *port)
@@ -388,7 +450,8 @@ static void fft_mono (kiss_fft_cfg fft_cfg)
 
   for (i = 0; i < FFT_SIZE; i++) {
     /* left channel */
-    lin[i].r = pcm_buf[new_pcm_idx][2 * i];
+int16_t tmp = pcm_buf[new_pcm_idx][i];
+    lin[i].r = (int16_t)(((tmp & 255) << 8) & 65280) | (int16_t)((tmp >> 8) & 255); //pcm_buf[new_pcm_idx][i];
     lin[i].i = 0;
   }
 
@@ -458,6 +521,8 @@ static void *fft_worker (void *arg0)
       log_error("cannot wait for fft condition: %s", strerror(res));
       break;
     }
+    if (num_clients <= raw_clients)
+      continue;
 
     if (sampling_channels == 1)
       fft_mono(fft_cfg);
@@ -469,7 +534,7 @@ static void *fft_worker (void *arg0)
     /* wake up all client threads */
     res = pthread_cond_broadcast(&display_cond);
     if (res) {
-      log_error("cannot signal display condition: %s", strerror(res));
+      log_error("cannot broadcast display condition: %s", strerror(res));
       break;
     }
   }
@@ -490,19 +555,25 @@ static int pcm_worker_loop (void *arg0)
   int *soundhandle = arg0;
   ssize_t num_bytes;
   int res;
+int to_read,num_read;
 
   while (num_clients > 0) {
-    num_bytes = read(*soundhandle, &pcm_buf[pcm_idx],
-                     FFT_SIZE * sampling_channels);
+to_read = 2*FFT_SIZE * MAX_CHANNELS; num_read=0;
+while (to_read > 0) {
+    num_bytes = read(*soundhandle, &pcm_buf[pcm_idx][num_read/2],
+                     to_read);
     if (num_bytes < 0) {
       log_error("cannot read pcm data: %s", strerror(errno));
       return -1;
     }
+num_read += num_bytes;
+to_read-=num_bytes;
+}
 
-    if (num_bytes != FFT_SIZE * sampling_channels) {
-      log_warn("read %li bytes of pcm data instead of %i", num_bytes,
-               FFT_SIZE);
-    }
+//    if (num_bytes != FFT_SIZE * sampling_channels) {
+//      log_warn("read %li bytes of pcm data instead of %i", num_bytes,
+//               FFT_SIZE);
+//    }
 
     pcm_idx = 1 - pcm_idx;
 
@@ -510,6 +581,13 @@ static int pcm_worker_loop (void *arg0)
     res = pthread_cond_signal(&fft_cond);
     if (res) {
       log_error("cannot signal fft condition: %s", strerror(res));
+      return -1;
+    }
+
+    /* wake up raw threads */
+    res = pthread_cond_broadcast(&raw_cond);
+    if (res) {
+      log_error("cannot broadcast raw condition: %s", strerror(res));
       return -1;
     }
   }
@@ -550,6 +628,13 @@ static int pcm_worker_loop (void *arg0)
       log_error("cannot signal fft condition: %s", strerror(res));
       return -1;
     }
+
+    /* wake up raw threads */
+    res = pthread_cond_broadcast(&raw_cond);
+    if (res) {
+      log_error("cannot broadcast raw condition: %s", strerror(res));
+      return -1;
+    }
   }
 
   return 0;
@@ -588,6 +673,25 @@ ERROR:
   kill(getpid(), SIGQUIT);
 
   return NULL;
+}
+
+static int count_raw (int i)
+{
+  int res;
+
+  res = pthread_mutex_lock(&raw_num_mtx);
+  if (res) {
+    log_warn("cannot lock raw_clients mutex: %s", strerror(res));
+    return res;
+  }
+
+  raw_clients += i;
+
+  res = pthread_mutex_unlock(&raw_num_mtx);
+  if (res)
+    log_warn("cannot unlock raw_clients mutex: %s", strerror(res));
+
+  return res;
 }
 
 static int count_client (int i)
@@ -996,6 +1100,61 @@ static char *has_header (char *buf, char *name, char *value)
   return found;
 }
 
+static void start_raw (struct client_worker_arg *arg)
+{
+  int res, new_pcm_idx;
+
+  if (write(arg->socket, &sampling_channels, sizeof(sampling_channels)) != (signed)sizeof(sampling_channels)) {
+    log_error("cannot write sampling_channels");
+    return;
+  }
+  if (write(arg->socket, &sampling_rate, sizeof(sampling_rate)) != (signed)sizeof(sampling_rate)) {
+    log_error("cannot write sampling_rate");
+    return;
+  }
+
+  if (count_raw(1))
+    return;
+
+  while (1) {
+    /* wake up pcm thread */
+    res = pthread_cond_signal(&pcm_cond);
+    if (res) {
+      log_warn("cannot signal pcm condition: %s", strerror(res));
+      break;
+    }
+
+    res = pthread_mutex_lock(&raw_mtx);
+    if (res) {
+      log_warn("cannot lock raw mutex: %s", strerror(res));
+      break;
+    }
+
+    /* wait for pcm thread to wake us up */
+    res = pthread_cond_wait(&raw_cond, &raw_mtx);
+    if (res) {
+      log_warn("cannot wait for raw condition: %s", strerror(res));
+      break;
+    }
+
+    res = pthread_mutex_unlock(&raw_mtx);
+    if (res) {
+      log_warn("cannot unlock raw mutex: %s", strerror(res));
+      break;
+    }
+
+    new_pcm_idx = pcm_idx;
+    new_pcm_idx = 1 - new_pcm_idx;
+
+    if (write(arg->socket, &pcm_buf[new_pcm_idx][0], 2*FFT_SIZE*MAX_CHANNELS) != 2*FFT_SIZE*MAX_CHANNELS) {
+      log_warn("cannot write pcm_buf");
+      break;
+    }
+  }
+
+  count_raw(-1);
+}
+
 static int read_http (struct client_worker_arg *arg)
 {
   char buf[8192], *p, *ws_key;
@@ -1031,6 +1190,12 @@ static int read_http (struct client_worker_arg *arg)
         start_display(arg, &color_display);
       return 1;
     }
+
+if (buf[0] == 'r') {
+  log_http(arg, "r", 200);
+  start_raw(arg);
+  return 1;
+}
 
     idx += res;
     buf[idx] = '\0';
@@ -1075,13 +1240,16 @@ static void *client_worker (void *arg0)
   thread_setname("grapheqd:client");
 
   client_address(arg);
-  count_client(1);
+  if (count_client(1))
+    goto ERROR;
 
   do {
     res = read_http(arg);
   } while (res == 0);
 
   count_client(-1);
+
+ERROR:
   close(arg->socket);
 
   return NULL;
@@ -1220,6 +1388,7 @@ static void *open_sound (const char *soundcard)
   snd_pcm_t *handle;
   snd_pcm_hw_params_t *params;
   int err;
+  snd_pcm_format_t format;
 
   if (!soundcard)
     soundcard = "hw:0";
@@ -1230,7 +1399,7 @@ static void *open_sound (const char *soundcard)
 
   err = snd_pcm_hw_params_malloc(&params);
   if (err)
-    errx(1, "snd_pcm_hw_params_alloca(): %s", snd_strerror(err));
+    errx(1, "snd_pcm_hw_params_malloc(): %s", snd_strerror(err));
 
   err = snd_pcm_hw_params_any(handle, params);
   if (err)
@@ -1242,10 +1411,17 @@ static void *open_sound (const char *soundcard)
     errx(1, "snd_pcm_hw_params_set_access(INTERLEAVED): %s",
             snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S16);
+  err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S16_LE);
   if (err)
-    warnx("snd_pcm_hw_params_set_format(SND_PCM_FORMAT_S16): %s",
+    warnx("snd_pcm_hw_params_set_format(SND_PCM_FORMAT_S16_LE): %s",
           snd_strerror(err));
+
+  err = snd_pcm_hw_params_get_format(params, &format);
+  if (err)
+    errx(1, "%s: %s", "snd_pcm_hw_params_get_format()", snd_strerror(err));
+
+  if (format != SND_PCM_FORMAT_S16_LE)
+    errx(1, "sampling format is not SND_PCM_FORMAT_S16_LE");
 
   sampling_channels = 2;
   err = snd_pcm_hw_params_set_channels(handle, params, 2);
@@ -1326,14 +1502,16 @@ int main (int argc, char **argv)
 {
   int res, listen_socket;
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL,
-       *soundcard = NULL;
+       *soundcard = NULL, *serveraddr = NULL, *serverport = NULL;
   struct passwd *user = NULL;
   void *soundptr;
   kiss_fft_cfg fft_cfg;
 
-  while ((res = getopt(argc, argv, "a:dhl:p:s:u:")) != -1) {
+  while ((res = getopt(argc, argv, "a:b:c:dhl:p:s:u:")) != -1) {
     switch (res) {
       case 'a': address = optarg; break;
+      case 'b': serverport = optarg; break;
+      case 'c': serveraddr = optarg; break;
       case 'd': foreground = 1; break;
       case 'h': show_help(); return 0;
       case 'l': port = optarg; break;
@@ -1345,7 +1523,10 @@ int main (int argc, char **argv)
   }
 
   listen_socket = create_listen_socket_inet(address, port);
-  soundptr = open_sound(soundcard);
+  if (serveraddr && serverport)
+    soundptr = create_client_socket_inet(serveraddr, serverport);
+  else
+    soundptr = open_sound(soundcard);
 
   if (!foreground)
     daemonize();
