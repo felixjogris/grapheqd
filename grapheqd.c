@@ -15,11 +15,18 @@
 #include <syslog.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <pwd.h>
 #include <grp.h>
 #include <pthread.h>
 #include <sys/uio.h>
-#include <alsa/asoundlib.h>
+#ifdef USE_OSS
+#  include <pthread_np.h>
+#  include <sys/ioctl.h>
+#  include <sys/soundcard.h>
+#else
+#  include <alsa/asoundlib.h>
+#endif
 #include <openssl/sha.h>
 #include "kiss_fft.h"
 #ifdef USE_SYSTEMD
@@ -273,6 +280,15 @@ static void client_address (struct client_worker_arg *arg)
   }
 }
 
+void thread_setname (const char *name)
+{
+#ifdef USE_OSS
+  pthread_set_name_np(pthread_self(), name);
+#else
+  pthread_setname_np(pthread_self(), name);
+#endif
+}
+
 static char fill_band (float (*level)[FFT_SIZE / 2], float max_level,
                        int start, int end)
 {
@@ -429,7 +445,7 @@ static void *fft_worker (void *arg0)
   kiss_fft_cfg fft_cfg = (kiss_fft_cfg) arg0;
   int res;
 
-  pthread_setname_np(pthread_self(), "grapheqd:fft");
+  thread_setname("grapheqd:fft");
 
   res = pthread_mutex_lock(&fft_mtx);
   if (res) {
@@ -470,10 +486,44 @@ ERROR:
   return NULL;
 }
 
-static int pcm_worker_loop (snd_pcm_t *soundhandle)
+#ifdef USE_OSS
+static int pcm_worker_loop (void *arg0)
 {
+  int *soundhandle = arg0;
+  ssize_t num_bytes;
   int res;
+
+  while (num_clients > 0) {
+    num_bytes = read(*soundhandle, &pcm_buf[pcm_idx],
+                     FFT_SIZE * sampling_channels);
+    if (num_bytes < 0) {
+      log_error("cannot read pcm data: %s", strerror(errno));
+      return -1;
+    }
+
+    if (num_bytes != FFT_SIZE * sampling_channels) {
+      log_warn("read %li bytes of pcm data instead of %i", num_bytes,
+               FFT_SIZE);
+    }
+
+    pcm_idx = 1 - pcm_idx;
+
+    /* wake up fft thread */
+    res = pthread_cond_signal(&fft_cond);
+    if (res) {
+      log_error("cannot signal fft condition: %s", strerror(res));
+      return -1;
+    }
+  }
+
+  return 0;
+}
+#else /* ^USE_OSS / v!USE_OSS */
+static int pcm_worker_loop (void *arg0)
+{
+  snd_pcm_t *soundhandle = arg0;
   snd_pcm_sframes_t num_frames;
+  int res;
 
   while (num_clients > 0) {
     num_frames = snd_pcm_readi(soundhandle, &pcm_buf[pcm_idx], FFT_SIZE);
@@ -506,13 +556,13 @@ static int pcm_worker_loop (snd_pcm_t *soundhandle)
 
   return 0;
 }
+#endif /* !USE_OSS */
 
 static void *pcm_worker (void *arg0)
 {
-  snd_pcm_t *soundhandle = (snd_pcm_t*) arg0;
   int res;
 
-  pthread_setname_np(pthread_self(), "grapheqd:pcm");
+  thread_setname("grapheqd:pcm");
 
   res = pthread_mutex_lock(&pcm_mtx);
   if (res) {
@@ -528,7 +578,7 @@ static void *pcm_worker (void *arg0)
       break;
     }
 
-    if (pcm_worker_loop(soundhandle))
+    if (pcm_worker_loop(arg0))
       break;
   }
 
@@ -1024,7 +1074,8 @@ static void *client_worker (void *arg0)
   struct client_worker_arg *arg = arg0;
   int res;
 
-  pthread_setname_np(pthread_self(), "grapheqd:client");
+  thread_setname("grapheqd:client");
+
   client_address(arg);
   count_client(1);
 
@@ -1115,12 +1166,64 @@ static void create_helper_worker (void *(*start_routine)(void*), void *arg,
     errx(1, "cannot create %s worker thread: %s", name, strerror(res));
 }
 
-static snd_pcm_t *open_alsa (const char *soundcard)
+#ifdef USE_OSS
+static int *open_sound (const char *soundcard)
+{
+  int *fd;
+  int format = AFMT_S16_LE;
+  int res;
+
+  if (!soundcard)
+    soundcard = "/dev/dsp0";
+
+  fd = malloc(sizeof(*fd));
+  if (fd == NULL)
+    errx(1, "malloc(): out of memory");
+
+  *fd = open(soundcard, O_RDONLY);
+  if (*fd < 0)
+    err(1, "cannot open %s for capturing", soundcard);
+
+  if (ioctl(*fd, SNDCTL_DSP_SETFMT, &format) == -1)
+    err(1, "SNDCTL_DSP_SETFMT(AFTM_S16_LE)");
+
+  sampling_channels = 2;
+  res = ioctl(*fd, SNDCTL_DSP_CHANNELS, &sampling_channels);
+  if (res == -1) {
+    sampling_channels = 1;
+    res = ioctl(*fd, SNDCTL_DSP_CHANNELS, &sampling_channels);
+  }
+  if (res == -1)
+    err(1, "SNDCTL_DSP_CHANNELS(2 or 1)");
+
+  sampling_rate = 44100;
+  res = ioctl(*fd, SNDCTL_DSP_SPEED, &sampling_rate);
+  if (res == -1) {
+    sampling_rate = 48000;
+    res = ioctl(*fd, SNDCTL_DSP_SPEED, &sampling_rate);
+  }
+  if (res == -1)
+    err(1, "SNDCTL_DSP_SPEED(44100 or 48000)");
+
+  return fd;
+}
+
+void close_sound (void *soundptr)
+{
+  int *fd = soundptr;
+  close(*fd);
+  free(fd);
+}
+#else /* ^USE_OSS / v!USE_OSS */
+static void *open_sound (const char *soundcard)
 {
   snd_pcm_t *handle;
   snd_pcm_hw_params_t *params;
   int err;
   snd_pcm_format_t format;
+
+  if (!soundcard)
+    soundcard = "hw:0";
 
   err = snd_pcm_open(&handle, soundcard, SND_PCM_STREAM_CAPTURE, 0);
   if (err)
@@ -1186,13 +1289,25 @@ static snd_pcm_t *open_alsa (const char *soundcard)
   return handle;
 }
 
+void close_sound (void *soundptr)
+{
+  snd_pcm_close((snd_pcm_t*) soundptr);
+}
+#endif /* !USE_OSS */
+
 static void show_help ()
 {
   puts(
 "graphedq version " GRAPHEQD_VERSION "\n"
+"PCM driver: "
+#ifdef USE_OSS
+"OSS"
+#else
+"ALSA"
+#endif
+"\n"
 "\n"
 "Usage:\n"
-"\n"
 "grapheqd [-a <address>] [-d] [-l <port>] [-p <pid file>] [-s <soundcard>]\n"
 "         [-u <user>]\n"
 "grapheqd -h\n"
@@ -1203,7 +1318,13 @@ static void show_help ()
 "  -l <port>           listen on this port; default: 8083\n"
 "  -p <pid file>       daemonize and save pid to this file; no default, pid\n"
 "                      gets not written to any file\n"
-"  -s <soundcard>      read PCM from this soundcard; default: hw:0\n"
+"  -s <soundcard>      read PCM from this soundcard; default: "
+#ifdef USE_OSS
+"/dev/dsp0"
+#else
+"hw:0"
+#endif
+"\n"
 "  -u <user>           switch to this user; no default, run as invoking user\n"
 "  -h                  show this help ;-)\n"
 );
@@ -1213,9 +1334,9 @@ int main (int argc, char **argv)
 {
   int res, listen_socket;
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL,
-       *soundcard = "hw:0";
+       *soundcard = NULL;
   struct passwd *user = NULL;
-  snd_pcm_t *soundhandle;
+  void *soundptr;
   kiss_fft_cfg fft_cfg;
 
   while ((res = getopt(argc, argv, "a:dhl:p:s:u:")) != -1) {
@@ -1232,7 +1353,7 @@ int main (int argc, char **argv)
   }
 
   listen_socket = create_listen_socket_inet(address, port);
-  soundhandle = open_alsa(soundcard);
+  soundptr = open_sound(soundcard);
 
   if (!foreground)
     daemonize();
@@ -1247,7 +1368,7 @@ int main (int argc, char **argv)
   if (!fft_cfg)
     errx(1, "cannot initialize FFT state");
 
-  create_helper_worker(&pcm_worker, soundhandle, "pcm");
+  create_helper_worker(&pcm_worker, soundptr, "pcm");
   create_helper_worker(&fft_worker, fft_cfg, "fft");
 
   setup_signals();
@@ -1269,7 +1390,7 @@ int main (int argc, char **argv)
       running = 0;
   }
 
-  snd_pcm_close(soundhandle);
+  close_sound(soundptr);
   close(listen_socket);
 
   if (pidfile)

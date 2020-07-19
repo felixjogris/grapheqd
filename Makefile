@@ -7,15 +7,19 @@ endif
 ifdef BUILD_ROOT
   CFLAGS += -I$(BUILD_ROOT)/usr/include -L$(BUILD_ROOT)/usr/lib
 endif
+ifdef USE_OSS
+  CFLAGS += -DUSE_OSS
+else
+  LDFLAGS += -lasound
+endif
 
 .PHONY:	clean install package
 
 grapheqd:	grapheqd.c rootpage.h favicon.h \
                 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
-	$(CC) $(CFLAGS) -W -Wall -O3 -s -pipe \
-        -I$(KISSFFT) -Dkiss_fft_scalar=float \
+	$(CC) $(CFLAGS) -W -Wall -O3 -s -pipe -I$(KISSFFT) \
         -o $@ grapheqd.c $(KISSFFT)/kiss_fft.c \
-        -lm -lpthread -lasound -lcrypto
+        $(LDFLAGS) -lm -lpthread -lcrypto
 
 rootpage.h:	rootpage.html bin2c.pl
 	perl bin2c.pl rootpage.html "text/html; charset=utf8" rootpage
