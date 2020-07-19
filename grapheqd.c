@@ -69,6 +69,8 @@
 #define XSTR(a) #a
 #define STR(a) XSTR(a)
 
+#define IS_BIGENDIAN() (*((int16_t*) "AB") == 0x4142)
+
 /* passed to a client worker thread after accept() */
 struct client_worker_arg {
   struct sockaddr addr;
@@ -107,6 +109,57 @@ static int sampling_channels;
 static int running = 1;
 /* used by main() and log_*() macros */
 static int foreground = 0;
+
+static int16_t swap_int16 (int16_t i)
+{
+  if (IS_BIGENDIAN())
+    return (((i & 255) << 8) | (i >> 8));
+
+  return i;
+}
+
+static int buf2int (char *buf)
+{
+  int i = 0, j;
+
+  if (IS_BIGENDIAN()) {
+    for (j = 0; j < 4; j++)
+      i = (i << 8) + buf[j];
+  } else {
+    for (j = 3; j >= 0; j--)
+      i = (i << 8) + buf[j];
+  }
+
+  return i;
+}
+
+int read_all (int sock, void *buf, size_t len)
+{
+  size_t read_bytes;
+  ssize_t res;
+
+  for (read_bytes = 0; read_bytes < len; read_bytes += res) {
+    res = read(sock, buf + read_bytes, len - read_bytes);
+    if (res <= 0)
+      return -1;
+  }
+
+  return 0;
+}
+
+int write_all (int sock, void *buf, size_t len)
+{
+  size_t written_bytes;
+  ssize_t res;
+
+  for (written_bytes = 0; written_bytes < len; written_bytes += res) {
+    res = write(sock, buf + written_bytes, len - written_bytes);
+    if (res <= 0)
+      return -1;
+  }
+
+  return 0;
+}
 
 static void quitterm_handler (int sig)
 {
@@ -156,9 +209,25 @@ static struct passwd *get_user (const char *username)
   return pw;
 }
 
+static int read_channels_rate (int client_socket)
+{
+  char buf[5];
+
+  if (write_all(client_socket, "r", 1))
+    return -1;
+
+  if (read_all(client_socket, buf, sizeof(buf)))
+    return -1;
+
+  sampling_channels = buf[0];
+  sampling_rate = buf2int(&buf[1]);
+
+  return 0;
+}
+
 static int *create_client_socket_inet (const char *host_or_ip, const char *service_or_port)
 {
-  int *client_socket, yes, res;
+  int client_socket = -1, *sockptr, yes = 1, res;
   struct addrinfo hints, *result, *walk;
 
   memset(&hints, 0, sizeof(hints));
@@ -167,56 +236,52 @@ static int *create_client_socket_inet (const char *host_or_ip, const char *servi
   hints.ai_socktype = SOCK_STREAM;
 
   if ((res = getaddrinfo(host_or_ip, service_or_port, &hints, &result)) != 0) {
-    errx(1, "getaddrinfo(): %s", gai_strerror(res));
-//    return -1;
+    log_warn("getaddrinfo(): %s", gai_strerror(res));
+    return NULL;
   }
 
-  client_socket = malloc(sizeof(*client_socket));
-  if (!client_socket)
-    errx(1, "malloc(): out of memory");
+  for (walk = result; walk; walk = walk->ai_next) {
+    if (client_socket >= 0)
+      close(client_socket);
 
-  for (walk = result;;) {
-    *client_socket = socket(walk->ai_family, walk->ai_socktype, 0);
-    if (*client_socket < 0)
+    client_socket = socket(walk->ai_family, walk->ai_socktype, 0);
+    if (client_socket < 0)
       continue;
 
-    yes = 1;
-    res = setsockopt(*client_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
-                     sizeof(yes));
-    if (res != 0) {
-      close(*client_socket);
-      continue;
-    }
-    
-    if (connect(*client_socket, walk->ai_addr, walk->ai_addrlen) == 0)
+    if (!setsockopt(client_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
+                    sizeof(yes)) &&
+        !connect(client_socket, walk->ai_addr, walk->ai_addrlen))
       break;
-
-    walk = walk->ai_next;
-    if (!walk) {
-      err(1, "connect()");
-//      return -1;
-    }
-
-    close(*client_socket);
   }
+
+  if (!walk)
+    log_warn("connect(): %s", strerror(errno));
 
   freeaddrinfo(result);
 
-write(*client_socket, "r", 1);
-{
-char buf[8];
-sampling_channels = 1;
-sampling_rate = 48000;
-read(*client_socket, buf, sizeof(sampling_channels));
-read(*client_socket, buf, sizeof(sampling_rate));
-}
+  if (!walk)
+    return NULL;
 
-  return client_socket;
+  if (read_channels_rate(client_socket)) {
+    close(client_socket);
+    return NULL;
+  }
+
+  sockptr = malloc(sizeof(*sockptr));
+  if (!sockptr) {
+    log_error("malloc(): out of memory");
+    close(client_socket);
+    return NULL;
+  }
+
+  *sockptr = client_socket;
+
+  return sockptr;
 }
 
 static int create_listen_socket_inet (const char *ip, const char *port)
 {
-  int listen_socket, yes, res;
+  int listen_socket = -1, yes = 1, res;
   struct addrinfo hints, *result, *walk;
 
   memset(&hints, 0, sizeof(hints));
@@ -227,41 +292,27 @@ static int create_listen_socket_inet (const char *ip, const char *port)
   if ((res = getaddrinfo(ip, port, &hints, &result)) != 0)
     errx(1, "getaddrinfo(): %s", gai_strerror(res));
 
-  for (walk = result;;) {
+  for (walk = result; walk; walk = walk->ai_next) {
+    if (listen_socket >= 0)
+      close(listen_socket);
+
     listen_socket = socket(walk->ai_family, walk->ai_socktype, 0);
     if (listen_socket < 0)
       continue;
 
-    yes = 1;
-    res = setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &yes,
-                     sizeof(yes));
-    if (res != 0) {
-      close(listen_socket);
-      continue;
-    }
-
-    yes = 1;
-    res = setsockopt(listen_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
-                     sizeof(yes));
-    if (res != 0) {
-      close(listen_socket);
-      continue;
-    }
-
-    if (bind(listen_socket, walk->ai_addr, walk->ai_addrlen) == 0)
+    if (!setsockopt(listen_socket, SOL_SOCKET, SO_REUSEPORT, &yes,
+                    sizeof(yes)) &&
+        !setsockopt(listen_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
+                    sizeof(yes)) &&
+        !bind(listen_socket, walk->ai_addr, walk->ai_addrlen) &&
+        !listen(listen_socket, 0))
       break;
-
-    walk = walk->ai_next;
-    if (!walk)
-      err(1, "bind()");
-
-    close(listen_socket);
   }
 
-  freeaddrinfo(result);
+  if (walk == NULL)
+    err(1, "bind()");
 
-  if (listen(listen_socket, 0) != 0)
-    err(1, "listen()");
+  freeaddrinfo(result);
 
   return listen_socket;
 }
@@ -450,8 +501,7 @@ static void fft_mono (kiss_fft_cfg fft_cfg)
 
   for (i = 0; i < FFT_SIZE; i++) {
     /* left channel */
-int16_t tmp = pcm_buf[new_pcm_idx][i];
-    lin[i].r = (int16_t)(((tmp & 255) << 8) & 65280) | (int16_t)((tmp >> 8) & 255); //pcm_buf[new_pcm_idx][i];
+    lin[i].r = pcm_buf[new_pcm_idx][i];
     lin[i].i = 0;
   }
 
@@ -549,31 +599,23 @@ ERROR:
   return NULL;
 }
 
+/* TODO: another function for read from clientsocket */
 #ifdef USE_OSS
 static int pcm_worker_loop (void *arg0)
 {
   int *soundhandle = arg0;
   ssize_t num_bytes;
   int res;
-int to_read,num_read;
 
   while (num_clients > 0) {
-to_read = 2*FFT_SIZE * MAX_CHANNELS; num_read=0;
-while (to_read > 0) {
-    num_bytes = read(*soundhandle, &pcm_buf[pcm_idx][num_read/2],
-                     to_read);
-    if (num_bytes < 0) {
+    if (read_all(*soundhandle, &pcm_buf[pcm_idx][0],
+                 2 * FFT_SIZE * MAX_CHANNELS)) {
       log_error("cannot read pcm data: %s", strerror(errno));
-      return -1;
+      return -1; /* XXX should not exit */
     }
-num_read += num_bytes;
-to_read-=num_bytes;
-}
 
-//    if (num_bytes != FFT_SIZE * sampling_channels) {
-//      log_warn("read %li bytes of pcm data instead of %i", num_bytes,
-//               FFT_SIZE);
-//    }
+    for (res = 0; res < FFT_SIZE * MAX_CHANNELS; res++)
+      pcm_buf[pcm_idx][res] = swap_int16(pcm_buf[pcm_idx][res]);
 
     pcm_idx = 1 - pcm_idx;
 
@@ -619,6 +661,9 @@ static int pcm_worker_loop (void *arg0)
       log_warn("read %li bytes of pcm data instead of %i", num_frames,
                FFT_SIZE);
     }
+
+    for (res = 0; res < FFT_SIZE * MAX_CHANNELS; res++)
+      pcm_buf[pcm_idx][res] = swap_int16(pcm_buf[pcm_idx][res]);
 
     pcm_idx = 1 - pcm_idx;
 
@@ -719,7 +764,7 @@ static char *str2buf (char *buf, const char * const str, size_t l)
   return buf + l - 1;
 }
 
-static void int2buf (char *buf, int i, int len)
+static void int2str (char *buf, int i, int len)
 {
   char *p = buf, *start = buf - len;
 
@@ -752,14 +797,14 @@ static char *json_display (int new_display_idx,
 
   p = str2buf(p, ws_json, sizeof(ws_json));
 
-  int2buf(p - 390, sampling_rate, 5);
-  int2buf(p - 377, sampling_channels, 1);
+  int2str(p - 390, sampling_rate, 5);
+  int2str(p - 377, sampling_channels, 1);
 
   for (col = 0; col < DISPLAY_BANDS; col++) {
-    int2buf(p - 365 + col * 3, display_buf[new_display_idx][0][col], 2);
-    int2buf(p - 273 + col * 3, display_buf[new_display_idx][1][col], 2);
-    int2buf(p - 178 + col * 3, (*peaks)[0][col].value, 2);
-    int2buf(p - 82 + col * 3, (*peaks)[1][col].value, 2);
+    int2str(p - 365 + col * 3, display_buf[new_display_idx][0][col], 2);
+    int2str(p - 273 + col * 3, display_buf[new_display_idx][1][col], 2);
+    int2str(p - 178 + col * 3, (*peaks)[0][col].value, 2);
+    int2str(p - 82 + col * 3, (*peaks)[1][col].value, 2);
   }
 
   return p;
@@ -922,7 +967,7 @@ static void start_display (struct client_worker_arg *arg,
 
     p = (*display_func)(new_display_idx, &peaks, buf);
 
-    if (write(arg->socket, buf, p - buf) != p - buf)
+    if (write_all(arg->socket, buf, p - buf))
       return;
   }
 }
@@ -949,7 +994,7 @@ static int send_http (struct client_worker_arg *arg, const char *url,
   log_http(arg, url, code);
 
   p = str2buf(buf, status_line, sizeof(status_line));
-  int2buf(p - 2, code, 3);
+  int2str(p - 2, code, 3);
   iov[0].iov_base = buf;
   iov[0].iov_len = sizeof(status_line) - 1;
   len = sizeof(status_line) - 1;
@@ -1100,15 +1145,16 @@ static char *has_header (char *buf, char *name, char *value)
   return found;
 }
 
+/* TODO endianess of channels+rate */
 static void start_raw (struct client_worker_arg *arg)
 {
   int res, new_pcm_idx;
 
-  if (write(arg->socket, &sampling_channels, sizeof(sampling_channels)) != (signed)sizeof(sampling_channels)) {
+  if (write_all(arg->socket, &sampling_channels, sizeof(sampling_channels))) {
     log_error("cannot write sampling_channels");
     return;
   }
-  if (write(arg->socket, &sampling_rate, sizeof(sampling_rate)) != (signed)sizeof(sampling_rate)) {
+  if (write_all(arg->socket, &sampling_rate, sizeof(sampling_rate))) {
     log_error("cannot write sampling_rate");
     return;
   }
@@ -1146,7 +1192,8 @@ static void start_raw (struct client_worker_arg *arg)
     new_pcm_idx = pcm_idx;
     new_pcm_idx = 1 - new_pcm_idx;
 
-    if (write(arg->socket, &pcm_buf[new_pcm_idx][0], 2*FFT_SIZE*MAX_CHANNELS) != 2*FFT_SIZE*MAX_CHANNELS) {
+    if (write_all(arg->socket, &pcm_buf[new_pcm_idx][0],
+                  2 * FFT_SIZE * MAX_CHANNELS)) {
       log_warn("cannot write pcm_buf");
       break;
     }
@@ -1185,17 +1232,16 @@ static int read_http (struct client_worker_arg *arg)
 
     if (buf[0] == 'c') {
       log_http(arg, "c", 200);
-      res = write(arg->socket, term_title, sizeof(term_title) - 1);
-      if (res == (signed) sizeof(term_title) - 1)
+      if (!write(arg->socket, term_title, sizeof(term_title) - 1))
         start_display(arg, &color_display);
       return 1;
     }
 
-if (buf[0] == 'r') {
-  log_http(arg, "r", 200);
-  start_raw(arg);
-  return 1;
-}
+    if (buf[0] == 'r') {
+      log_http(arg, "r", 200);
+      start_raw(arg);
+      return 1;
+    }
 
     idx += res;
     buf[idx] = '\0';
@@ -1524,6 +1570,7 @@ int main (int argc, char **argv)
 
   listen_socket = create_listen_socket_inet(address, port);
   if (serveraddr && serverport)
+/* XXX not here */
     soundptr = create_client_socket_inet(serveraddr, serverport);
   else
     soundptr = open_sound(soundcard);
