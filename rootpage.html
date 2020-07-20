@@ -1589,6 +1589,11 @@ var reconnectID;
    first response */
 var is_first_response;
 
+var OPACITY_BRIGHT = 0.8;
+var OPACITY_FADE = 0.5;
+var OPACITY_DARK = 0.2;
+
+
 function toggleErrorPane (visibility) {
   var errorPane = document.getElementById("errorPane");
 
@@ -1596,11 +1601,6 @@ function toggleErrorPane (visibility) {
     errorPane.style.visibility = visibility;
     document.getElementById("errorText").style.visibility = visibility;
   }
-}
-
-function opacity (bright)
-{
-  return (bright ? 0.8 : 0.2);
 }
 
 function labelChannel (rate, channel)
@@ -1627,10 +1627,10 @@ function displayParameters (data)
   var is_stereo = (data["channels"] == 2);
   var is_44100hz = (data["rate"] == 44100);
 
-  document.getElementById("mono").style.opacity = opacity(!is_stereo);
-  document.getElementById("stereo").style.opacity = opacity(is_stereo);
-  document.getElementById("hz44100").style.opacity = opacity(is_44100hz);
-  document.getElementById("hz48000").style.opacity = opacity(!is_44100hz);
+  document.getElementById("mono").style.opacity = (is_stereo ? OPACITY_DARK : OPACITY_BRIGHT);
+  document.getElementById("stereo").style.opacity = (is_stereo ? OPACITY_BRIGHT : OPACITY_DARK);
+  document.getElementById("hz44100").style.opacity = (is_44100hz ? OPACITY_BRIGHT : OPACITY_DARK);
+  document.getElementById("hz48000").style.opacity = (is_44100hz ? OPACITY_DARK : OPACITY_BRIGHT);
 
   ["left", "right"].forEach(channel => labelChannel(data["rate"], channel));
 }
@@ -1641,16 +1641,16 @@ function displayChannel (data, channel)
     var elemID = channel + col + "_";
     var row;
     for (row = 0; row < data[channel][col]; row++) {
-      document.getElementById(elemID + row).style.opacity = opacity(true);
+      document.getElementById(elemID + row).style.opacity = OPACITY_BRIGHT;
     }
     for (; row < 25; row++) {
       var s = document.getElementById(elemID + row).style;
-      s.opacity = (s.opacity == opacity(true) ? 0.5 : opacity(false));
+      s.opacity = (s.opacity == OPACITY_BRIGHT ? OPACITY_FADE : OPACITY_DARK);
     }
     row = data["peak" + channel][col];
     if (row > 0) {
       row--;
-      document.getElementById(elemID + row).style.opacity = opacity(true);
+      document.getElementById(elemID + row).style.opacity = OPACITY_BRIGHT;
     }
   }
 }
