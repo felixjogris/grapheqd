@@ -90,7 +90,7 @@ struct server {
 };
 
 static int pcm_idx = 0;
-static char pcm_buf[2][FFT_SIZE * MAX_CHANNELS * SAMPLING_WIDTH];
+static unsigned char pcm_buf[2][FFT_SIZE * MAX_CHANNELS * SAMPLING_WIDTH];
 static pthread_mutex_t pcm_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pcm_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t fft_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -114,18 +114,18 @@ static int running = 1;
 /* used by main() and log_*() macros */
 static int foreground = 0;
 
-static int16_t int16_tohost (char *buf)
+static int16_t int16_tohost (unsigned char *buf)
 {
   return ((int16_t)(buf[1] << 8) | buf[0]);
 }
 
-static void int16_tobuf (int16_t i16, char *buf)
+static void int16_tobuf (int16_t i16, unsigned char *buf)
 {
   buf[0] = i16 & 255;
   buf[1] = i16 >> 8;
 }
 
-static int32_t int32_tohost (char *buf)
+static int32_t int32_tohost (unsigned char *buf)
 {
   int32_t i32 = 0;
   int i;
@@ -136,7 +136,7 @@ static int32_t int32_tohost (char *buf)
   return i32;
 }
 
-static void int32_tobuf (int32_t i32, char *buf)
+static void int32_tobuf (int32_t i32, unsigned char *buf)
 {
   int i;
 
@@ -632,7 +632,7 @@ static void *raw_recv (void *arg0)
   struct server *srv = arg0;
   int res;
   const char *err;
-  char buf[6];
+  unsigned char buf[6];
 
   thread_setname("grapheqd:recv");
 
@@ -656,6 +656,12 @@ static void *raw_recv (void *arg0)
       continue;
     }
 
+    if (write_all(srv->socket, "r", 1)) {
+      log_error("%s:%s: cannot xmit raw mode: %s",
+                srv->addr, srv->port, strerror(errno));
+      return 0;
+    }
+
     res = read_all(srv->socket, &buf[0], sizeof(buf));
     if (res < 0) {
       log_error("%s:%s: cannot recv sampling_channels and sampling_rate: %s",
@@ -669,6 +675,17 @@ static void *raw_recv (void *arg0)
 
     sampling_channels = int16_tohost(&buf[0]);
     sampling_rate = int32_tohost(&buf[2]);
+
+    if (sampling_channels > MAX_CHANNELS) {
+      log_error("%s:%s: %i channels, " STR(MAX_CHANNELS) " supported",
+                srv->addr, srv->port, sampling_channels);
+      return 0;
+    }
+    if ((sampling_rate != 44100) && (sampling_rate != 48000)) {
+      log_error("%s:%s: rate of %i Hz not supported",
+                srv->addr, srv->port, sampling_rate);
+      return 0;
+    }
 
     if (raw_recv_loop(srv))
       break;
@@ -1227,7 +1244,7 @@ static char *has_header (char *buf, char *name, char *value)
 static void raw_xmit (struct client_worker_arg *arg)
 {
   int res, new_pcm_idx;
-  char buf[6];
+  unsigned char buf[6];
 
   thread_setname("grapheqd:xmit");
 
@@ -1635,7 +1652,7 @@ int main (int argc, char **argv)
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL,
        *soundcard = NULL;
   const char *err;
-  struct server srv;
+  struct server srv = { 0 };
   struct passwd *user = NULL;
   void *soundptr = NULL;
   kiss_fft_cfg fft_cfg;
