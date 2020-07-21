@@ -17,7 +17,7 @@ favicon.h:	favicon.ico bin2c.pl
 
 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c: ;	git clone https://github.com/mborgerding/kissfft.git $(KISSFFT)
 
-install:	grapheqd
+install:	grapheqd grapheqd.sh
 	install -d /usr/local/sbin /usr/local/etc/rc.d
 	install grapheqd /usr/local/sbin/
 	install grapheqd.sh /usr/local/etc/rc.d/grapheqd

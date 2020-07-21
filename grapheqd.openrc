@@ -1,17 +1,26 @@
 #!/sbin/openrc-run
 
-: ${GRAPHEQD_BINARY:=${RC_PREFIX%/}/usr/local/sbin/grapheqd}
-: ${GRAPHEQD_PIDFILE:=${RC_PREFIX%/}/run/${RC_SVCNAME}.pid}
-: ${GRAPHEQD_ADDRESS:=0.0.0.0}
-: ${GRAPHEQD_PORT:=8083}
-: ${GRAPHEQD_SOUNDCARD:=hw,0}
-: ${GRAPHEQD_USER:=nobody}
+: ${GRAPHEQD_BINARY:="${RC_PREFIX%/}/usr/local/sbin/grapheqd}"}
+: ${GRAPHEQD_PIDFILE:="${RC_PREFIX%/}/run/${RC_SVCNAME}.pid}"}
+: ${GRAPHEQD_USER:="nobody"}
 
-command="${GRAPHEQD_BINARY}"
-pidfile="${GRAPHEQD_PIDFILE}"
-command_args="-a ${GRAPHEQD_ADDRESS} -l ${GRAPHEQD_PORT} -s ${GRAPHEQD_SOUNDCARD} -u ${GRAPHEQD_USER} -p ${pidfile}"
+description="Graphical equalizer daemon"
+command="$GRAPHEQD_BINARY"
+pidfile="$GRAPHEQD_PIDFILE"
+
+[ "$pidfile" != "/var/run/grapheqd.pid" ] && command_args="$command_args -p '$pidfile'"
+
+[ -n "$GRAPHEQD_ADDRESS" ]   && command_args="$command_args -a '$GRAPHEQD_ADDRESS'"
+[ -n "$GRAPHEQD_PORT" ]      && command_args="$command_args -p '$GRAPHEQD_PORT'"
+[ -n "$GRAPHEQD_RADDRESS" ]  && command_args="$command_args -c '$GRAPHEQD_RADDRESS'"
+[ -n "$GRAPHEQD_RPORT" ]     && command_args="$command_args -r '$GRAPHEQD_RPORT'"
+[ -n "$GRAPHEQD_SOUNDCARD" ] && command_args="$command_args -s '$GRAPHEQD_SOUNDCARD'"
+[ -n "$GRAPHEQD_USER" ]      && command_args="$command_args -u '$GRAPHEQD_USER'"
+
+$command_args="${command_args# }"
 
 depend() {
 	need localmount
+	after bootmisc
 	after alsasound
 }
