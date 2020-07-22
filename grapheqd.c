@@ -334,7 +334,7 @@ static void save_pidfile (const char *pidfile)
 
   len = snprintf(pid, sizeof(pid), "%u\n", getpid());
 
-  if (write(fd, pid, len) != len)
+  if (write_all(fd, pid, len) != len)
     errx(1, "cannot write %s", pidfile);
 
   if (close(fd))
@@ -1306,7 +1306,7 @@ static int read_http (struct client_worker_arg *arg)
   int res, connection_close = 0;
 #include "rootpage.h"
 #include "favicon.h"
-  const char term_title[] = "\x1b]2;grapheqd\x1b\\";
+  char term_title[] = "\x1b]2;grapheqd\x1b\\";
   char not_found[] = "Content-Type: text/plain\r\n"
                      "Content-Length: 12\r\n"
                      "\r\n"
@@ -1329,7 +1329,7 @@ static int read_http (struct client_worker_arg *arg)
 
     if (buf[0] == 'c') {
       log_http(arg, "c", 200);
-      if (!write(arg->socket, term_title, sizeof(term_title) - 1))
+      if (!write_all(arg->socket, term_title, sizeof(term_title) - 1))
         start_display(arg, &color_display);
       return 1;
     }
