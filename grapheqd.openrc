@@ -6,6 +6,12 @@ pidfile="${RC_PREFIX%/}/run/${RC_SVCNAME}.pid"
 
 : ${GRAPHEQD_USERNAME:="nobody"}
 
+if [ -n "$GRAPHEQD_PIDFILE" ]; then
+  pidfile="$GRAPHEQD_PIDFILE"
+fi
+
+command_args="-p '$pidfile'"
+
 if [ -n "$GRAPHEQD_ADDRESS" ]; then
   command_args="$command_args -a '$GRAPHEQD_ADDRESS'"
 fi
@@ -23,10 +29,6 @@ if [ -n "$GRAPHEQD_SOUNDCARD" ]; then
 fi
 if [ -n "$GRAPHEQD_USERNAME" ]; then
   command_args="$command_args -u '$GRAPHEQD_USERNAME'"
-fi
-if [ -n "$GRAPHEQD_PIDFILE" ]; then
-  pidfile="$GRAPHEQD_PIDFILE"
-  command_args="$command_args -p '$pidfile'"
 fi
 
 command_args="${command_args# }"

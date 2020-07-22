@@ -20,6 +20,12 @@ load_rc_config "$name"
 command="/usr/local/sbin/grapheqd"
 pidfile="/var/run/${name}.pid"
 
+if [ -n "$grapheqd_pidfile" ]; then
+  pidfile="$grapheqd_pidfile"
+fi
+
+command_args="-p '$pidfile'"
+
 if [ -n "$grapheqd_address" ]; then
   command_args="$command_args -a '$grapheqd_address'"
 fi
@@ -38,11 +44,5 @@ fi
 if [ -n "$grapheqd_username" ]; then
   command_args="$command_args -u '$grapheqd_username'"
 fi
-if [ -n "$grapheqd_pidfile" ]; then
-  pidfile="$grapheqd_pidfile"
-  command_args="$command_args -p '$pidfile'"
-fi
-
-command_args="${command_args# }"
 
 run_rc_command "$1"
