@@ -21,6 +21,7 @@ load_rc_config "$name"
 command="/usr/local/sbin/grapheqd"
 pidfile="$grapheqd_pidfile"
 command_args="-p '$pidfile' -u '$grapheqd_username'"
+start_precmd="remove_stale_pidfile"
 
 if [ -n "$grapheqd_address" ]; then
   command_args="$command_args -a '$grapheqd_address'"
@@ -37,5 +38,11 @@ fi
 if [ -n "$grapheqd_soundcard" ]; then
   command_args="$command_args -s '$grapheqd_soundcard'"
 fi
+
+remove_stale_pidfile() {
+  if [ -e "$pidfile" -a -z "$(check_pidfile "$pidfile" "$command")" ]; then
+    rm "$pidfile"
+  fi
+}
 
 run_rc_command "$1"
