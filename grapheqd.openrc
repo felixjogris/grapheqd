@@ -6,11 +6,8 @@
 description="Graphical equalizer daemon"
 command="${RC_PREFIX%/}/usr/local/sbin/grapheqd}"
 pidfile="$GRAPHEQD_PIDFILE"
-command_args="-u '${grapheqd_username}'"
+command_args="-p '$pidfile' -u '$grapheqd_username'"
 
-if [ "$pidfile" != "/var/run/grapheqd.pid" ]; then
-  command_args="$command_args -p '$grapheqd_pidfile'"
-fi
 if [ -n "$GRAPHEQD_ADDRESS" ]; then
   command_args="$command_args -a '$GRAPHEQD_ADDRESS'"
 fi

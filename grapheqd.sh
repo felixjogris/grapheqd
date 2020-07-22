@@ -19,12 +19,9 @@ load_rc_config "$name"
 : ${grapheqd_username:="nobody"}
 
 command="/usr/local/sbin/grapheqd"
-pidfile="${grapheqd_pidfile}"
-command_args="-u '${grapheqd_username}'"
+pidfile="$grapheqd_pidfile"
+command_args="-p '$pidfile' -u '$grapheqd_username'"
 
-if [ "$pidfile" != "/var/run/grapheqd.pid" ]; then
-  command_args="$command_args -p '$grapheqd_pidfile'"
-fi
 if [ -n "$grapheqd_address" ]; then
   command_args="$command_args -a '$grapheqd_address'"
 fi
