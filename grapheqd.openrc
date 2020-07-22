@@ -1,21 +1,33 @@
 #!/sbin/openrc-run
 
-: ${GRAPHEQD_BINARY:="${RC_PREFIX%/}/usr/local/sbin/grapheqd}"}
-: ${GRAPHEQD_PIDFILE:="${RC_PREFIX%/}/run/${RC_SVCNAME}.pid}"}
+description="Graphical equalizer daemon"
+command="${RC_PREFIX%/}/usr/local/sbin/grapheqd}"
+pidfile="${RC_PREFIX%/}/run/${RC_SVCNAME}.pid"
+
 : ${GRAPHEQD_USER:="nobody"}
 
-description="Graphical equalizer daemon"
-command="$GRAPHEQD_BINARY"
-pidfile="$GRAPHEQD_PIDFILE"
-
-[ "$pidfile" != "/var/run/grapheqd.pid" ] && command_args="$command_args -p '$pidfile'"
-
-[ -n "$GRAPHEQD_ADDRESS" ]   && command_args="$command_args -a '$GRAPHEQD_ADDRESS'"
-[ -n "$GRAPHEQD_PORT" ]      && command_args="$command_args -p '$GRAPHEQD_PORT'"
-[ -n "$GRAPHEQD_RADDRESS" ]  && command_args="$command_args -c '$GRAPHEQD_RADDRESS'"
-[ -n "$GRAPHEQD_RPORT" ]     && command_args="$command_args -r '$GRAPHEQD_RPORT'"
-[ -n "$GRAPHEQD_SOUNDCARD" ] && command_args="$command_args -s '$GRAPHEQD_SOUNDCARD'"
-[ -n "$GRAPHEQD_USER" ]      && command_args="$command_args -u '$GRAPHEQD_USER'"
+if [ -n "$GRAPHEQD_ADDRESS" ]; then
+  command_args="$command_args -a '$GRAPHEQD_ADDRESS'"
+fi
+if [ -n "$GRAPHEQD_PORT" ]; then
+  command_args="$command_args -l '$GRAPHEQD_PORT'"
+fi
+if [ -n "$GRAPHEQD_RADDRESS" ]; then
+  command_args="$command_args -c '$GRAPHEQD_RADDRESS'"
+fi
+if [ -n "$GRAPHEQD_RPORT" ]; then
+  command_args="$command_args -r '$GRAPHEQD_RPORT'"
+fi
+if [ -n "$GRAPHEQD_SOUNDCARD" ]; then
+  command_args="$command_args -s '$GRAPHEQD_SOUNDCARD'"
+fi
+if [ -n "$GRAPHEQD_USER" ]; then
+  command_args="$command_args -u '$GRAPHEQD_USER'"
+fi
+if [ -n "$GRAPHEQD_PIDFILE" ]; then
+  pidfile="$GRAPHEQD_PIDFILE"
+  command_args="$command_args -p '$pidfile'"
+fi
 
 $command_args="${command_args# }"
 

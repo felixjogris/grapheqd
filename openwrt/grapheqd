@@ -26,7 +26,7 @@ start_service () {
   args="-d"
 
   [ -n "$address" ]   && $args="$args -a '$address'"
-  [ -n "$port" ]      && $args="$args -p '$port'"
+  [ -n "$port" ]      && $args="$args -l '$port'"
   [ -n "$raddress" ]  && $args="$args -c '$raddress'"
   [ -n "$rport" ]     && $args="$args -r '$rport'"
   [ -n "$soundcard" ] && $args="$args -s '$soundcard'"

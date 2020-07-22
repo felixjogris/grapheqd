@@ -15,21 +15,34 @@ rcvar="${name}_enable"
 
 load_rc_config "$name"
 : ${grapheqd_enable:="NO"}
-: ${grapheqd_pidfile:="/var/run/${name}.pid"}
 : ${grapheqd_user:="nobody"}
 
 command="/usr/local/sbin/grapheqd"
-pidfile="$grapheqd_pidfile"
+pidfile="/var/run/${name}.pid"
 
-[ "$pidfile" != "/var/run/grapheqd.pid" ] && command_args="$command_args -p '$pidfile'"
+if [ -n "$grapheqd_address" ]; then
+  command_args="$command_args -a '$grapheqd_address'"
+fi
+if [ -n "$grapheqd_port" ]; then
+  command_args="$command_args -l '$grapheqd_port'"
+fi
+if [ -n "$grapheqd_raddress" ]; then
+  command_args="$command_args -c '$grapheqd_raddress'"
+fi
+if [ -n "$grapheqd_rport" ]; then
+  command_args="$command_args -r '$grapheqd_rport'"
+fi
+if [ -n "$grapheqd_soundcard" ]; then
+  command_args="$command_args -s '$grapheqd_soundcard'"
+fi
+if [ -n "$grapheqd_user" ]; then
+  command_args="$command_args -u '$grapheqd_user'"
+fi
+if [ -n "$grapheqd_pidfile" ]; then
+  pidfile="$grapheqd_pidfile"
+  command_args="$command_args -p '$pidfile'"
+fi
 
-[ -n "$grapheqd_address" ]   && command_args="$command_args -a '$grapheqd_address'"
-[ -n "$grapheqd_port" ]      && command_args="$command_args -p '$grapheqd_port'"
-[ -n "$grapheqd_raddress" ]  && command_args="$command_args -c '$grapheqd_raddress'"
-[ -n "$grapheqd_rport" ]     && command_args="$command_args -r '$grapheqd_rport'"
-[ -n "$grapheqd_soundcard" ] && command_args="$command_args -s '$grapheqd_soundcard'"
-[ -n "$grapheqd_user" ]      && command_args="$command_args -u '$grapheqd_user'"
-
-$command_args="${command_args# }"
+command_args="${command_args# }"
 
 run_rc_command "$1"
