@@ -13,7 +13,7 @@ start_service () {
   local raddress
   local rport
   local soundcard
-  local user
+  local username
   local args
 
   config_get address   @grapheqd[0] address
@@ -21,7 +21,7 @@ start_service () {
   config_get raddress  @grapheqd[0] raddress
   config_get rport     @grapheqd[0] rport
   config_get soundcard @grapheqd[0] soundcard
-  config_get user      @grapheqd[0] user
+  config_get username  @grapheqd[0] username
 
   args="-d"
 
@@ -30,7 +30,7 @@ start_service () {
   [ -n "$raddress" ]  && $args="$args -c '$raddress'"
   [ -n "$rport" ]     && $args="$args -r '$rport'"
   [ -n "$soundcard" ] && $args="$args -s '$soundcard'"
-  [ -n "$user" ]      && $args="$args -u '$user'"
+  [ -n "$username" ]  && $args="$args -u '$username'"
 
   procd_open_instance
   procd_set_param command /usr/sbin/grapheqd $args

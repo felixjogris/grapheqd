@@ -15,7 +15,7 @@ rcvar="${name}_enable"
 
 load_rc_config "$name"
 : ${grapheqd_enable:="NO"}
-: ${grapheqd_user:="nobody"}
+: ${grapheqd_username:="nobody"}
 
 command="/usr/local/sbin/grapheqd"
 pidfile="/var/run/${name}.pid"
@@ -35,8 +35,8 @@ fi
 if [ -n "$grapheqd_soundcard" ]; then
   command_args="$command_args -s '$grapheqd_soundcard'"
 fi
-if [ -n "$grapheqd_user" ]; then
-  command_args="$command_args -u '$grapheqd_user'"
+if [ -n "$grapheqd_username" ]; then
+  command_args="$command_args -u '$grapheqd_username'"
 fi
 if [ -n "$grapheqd_pidfile" ]; then
   pidfile="$grapheqd_pidfile"
