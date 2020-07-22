@@ -1,6 +1,6 @@
 # grapheqd
 
-grapheqd stands for graphical equalizer daemon. It displays the frequency spectrum of an audio signal via its HTML5 webpage or ASCII based telnet interface. grapheqd runs as a daemon on Linux with [OpenWRT](https://openwrt.org/) in mind. It supports PCM signals with one or two channels (read: mono or stereo) and 16 bits per channel. Your audio device must be capable of sampling at 44100 or 48000 Hz. You need a modern web browser with support for JavaScript, CSS3, and websockets in order to access the web interface.
+grapheqd stands for graphical equalizer daemon. It displays the frequency spectrum of an audio signal via its HTML5 webpage or ASCII based telnet interface. grapheqd runs as a daemon on either Linux with [OpenWRT](https://openwrt.org/) in mind, or FreeBSD. Thus, it uses either ALSA or OSS, choosen at compile time. As FFT computation might require a lot CPU resources on systems without mathematical coprocessor, grapheqd can operate in a client/server mode, where a remote instance on a more powerful system does not use an actual sound device, but connects to a grapheqd instance running on a system with limited CPU power. In such scenarios, you should point your web browser or telnet client only to the remote instance. grapheqd supports PCM signals with one or two channels (read: mono or stereo) and 16 bits per channel. Your audio device must be capable of sampling at 44100 or 48000 Hz. You need a modern web browser with support for JavaScript, CSS3, and websockets in order to access the web interface.
 
 ## Background
 
@@ -24,22 +24,28 @@ If your terminal does not support colors and/or escape sequences, press *m* foll
 
 ```
 $ ./grapheqd -h
-graphedq version 1
+graphedq version 3
+PCM driver: OSS
 
 Usage:
-
-grapheqd [-a <address>] [-d] [-l <port>] [-p <pid file>] [-s <soundcard>]
-         [-u <user>]
+grapheqd [-a <address>] [-c <address>] [-d] [-l <port>] [-p <pid file>]
+         [-r <port>] [-s <soundcard>] [-u <user>]
 grapheqd -h
 
-  -a <address>        listen on this address; default: 0.0.0.0
-  -d                  run in foreground and do not detach from terminal
-  -l <port>           listen on this port; default: 8083
-  -p <pid file>       daemonize and save pid to this file; no default, pid
-                      gets not written to any file
-  -s <soundcard>      read PCM from this soundcard; default: hw:0
-  -u <user>           switch to this user; no default, run as invoking user
-  -h                  show this help ;-)
+  -a <address>      listen on this address; default: 0.0.0.0
+  -c <address>      connect to another grapheqd running at this address, do
+                    not use any actual audio hardware; cannot be used in
+                    conjunction with option -s
+  -d                run in foreground, and log to stdout/stderr, do not detach
+                    detach from terminal, do not log to syslog
+  -l <port>         listen on this port; default: 8083
+  -p <pid file>     daemonize and save pid to this file; no default, pid gets
+                    not written to any file
+  -r <port>         connect to a remote grapheqd on this port; default: 8083
+  -s <soundcard>    read PCM from this soundcard; default: /dev/dsp0; cannot
+                    be used in conjunction with either option -c or -r
+  -u <user>         switch to this user; no default, run as invoking user
+  -h                show this help ;-)
 
 ```
 
@@ -53,21 +59,27 @@ grapheqd -h
 
   `git clone https://github.com/mborgerding/kissfft.git ../kissfft`
 
-* ALSA library and headers to access your audio device and to read PCM data
+* On Linux: ALSA library and headers to access your audio device and to read PCM data
 
   Your Linux distro should have these.
+
+* On FreeBSD: OSS library and headers to access your audio device and to read PCM data
+
+  FreeBSD 4 and newer should have these. However, I just tested with FreeBSD 12.
 
 * OpenSSL crypto library and headers for SHA1 hashing of the *Sec-WebSocket-Accept* header when switching protocols
 
   Your Linux distro should have these as well.
 
-* Glibc system library and headers with support for libm for mathematical routines and pthreads for threads, mutexes, and conditions. Any other libc might do as well, but has not been tested yet.
+* (G)libc system library and headers with support for libm for mathematical routines and pthreads for threads, mutexes, and conditions. Any other libc might do as well, but has not been tested yet.
 
-* C compiler. I tested with GCC version 10.1.0 and Clang/LLVM 10.0.0.
+* C compiler. I tested with GCC version 10.1.0, and Clang/LLVM 8.0.1 and 10.0.0.
 
   For cross compiling you can pass *CC* to *make*, e.g. `make CC=mips-openwrt-linux-gcc`
 
-* GNU make or any other compatible make.
+* On Linux: GNU make or any other compatible make.
+
+* On FreeBSD: default /usr/bin/make or any other compatible make.
 
 ### Build
 
@@ -81,11 +93,11 @@ grapheqd -h
 
    `git clone https://github.com/mborgerding/kissfft.git ../kissfft`
 
-3. Call `make`. It will fetch KISS FFT automatically if you haven't done it, and will compile everything.
+3. Call `make`. It will use Makefile or GNUmakefile on FreeBSD or Linux, respectively, and fetch KISS FFT automatically if you haven't done it, and will compile everything.
 
 4. Optionally, if you want systemd integration, call *make* with *USE_SYSTEMD=1*
 
-5. You now have *grapheqd* in the current directory. Either call it directly, copy it somewhere, or run `sudo make install`, which will place it to */usr/local/sbin*. Then either add it to your RC init or systemd configuration, or use the provided scripts `grapheqd.service` or `grapheqd.openrc`, which `make install` has copied to `/lib/systemd/system` or `/etc/init.d`, respectively.
+5. You now have *grapheqd* in the current directory. Either call it directly, copy it somewhere, or run `sudo make install`, which will place it to */usr/local/sbin*. Then either add it to your RC init or systemd configuration, or use the provided scripts `grapheqd.service`, `grapheqd.openrc`, or `grapheqd.sh`, which `make install` has copied to `/lib/systemd/system`, `/etc/init.d`, or `/usr/local/etc/rc.d`, respectively.
 
 ### OpenWRT
 

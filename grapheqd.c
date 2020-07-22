@@ -1624,7 +1624,9 @@ static void show_help ()
 "grapheqd -h\n"
 "\n"
 "  -a <address>      listen on this address; default: 0.0.0.0\n"
-"  -c <address>      connect to another grapheqd running at this address\n"
+"  -c <address>      connect to another grapheqd running at this address, do\n"
+"                    not use any actual audio hardware; cannot be used in\n"
+"                    conjunction with option -s\n"
 "  -d                run in foreground, and log to stdout/stderr, do not "
                                                                     "detach\n"
 "                    detach from terminal, do not log to syslog\n"
@@ -1640,7 +1642,8 @@ static void show_help ()
 #else
 "hw:0"
 #endif
-"\n"
+"; cannot\n"
+"                    be used in conjunction with either option -c or -r\n"
 "  -u <user>         switch to this user; no default, run as invoking user\n"
 "  -h                show this help ;-)\n"
 );
