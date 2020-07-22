@@ -334,7 +334,7 @@ static void save_pidfile (const char *pidfile)
 
   len = snprintf(pid, sizeof(pid), "%u\n", getpid());
 
-  if (write_all(fd, pid, len) != len)
+  if (write_all(fd, pid, len))
     errx(1, "cannot write %s", pidfile);
 
   if (close(fd))
