@@ -29,7 +29,7 @@ if [ -n "$GRAPHEQD_PIDFILE" ]; then
   command_args="$command_args -p '$pidfile'"
 fi
 
-$command_args="${command_args# }"
+command_args="${command_args# }"
 
 depend() {
 	need localmount
