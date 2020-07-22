@@ -15,17 +15,16 @@ rcvar="${name}_enable"
 
 load_rc_config "$name"
 : ${grapheqd_enable:="NO"}
+: ${grapheqd_pidfile:="/var/run/${name}.pid"}
 : ${grapheqd_username:="nobody"}
 
 command="/usr/local/sbin/grapheqd"
-pidfile="/var/run/${name}.pid"
+pidfile="${grapheqd_pidfile}"
+command_args="-u '${grapheqd_username}'"
 
-if [ -n "$grapheqd_pidfile" ]; then
-  pidfile="$grapheqd_pidfile"
+if [ "$pidfile" != "/var/run/grapheqd.pid" ]; then
+  command_args="$command_args -p '$grapheqd_pidfile'"
 fi
-
-command_args="-p '$pidfile'"
-
 if [ -n "$grapheqd_address" ]; then
   command_args="$command_args -a '$grapheqd_address'"
 fi
@@ -40,9 +39,6 @@ if [ -n "$grapheqd_rport" ]; then
 fi
 if [ -n "$grapheqd_soundcard" ]; then
   command_args="$command_args -s '$grapheqd_soundcard'"
-fi
-if [ -n "$grapheqd_username" ]; then
-  command_args="$command_args -u '$grapheqd_username'"
 fi
 
 run_rc_command "$1"
