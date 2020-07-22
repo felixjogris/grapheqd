@@ -7,7 +7,7 @@ PKG_RELEASE:=1
 PKG_BUILD_DIR:=$(BUILD_DIR)/grapheqd-${PKG_VERSION}
 PKG_SOURCE:=grapheqd-3.tar.bz2
 PKG_SOURCE_URL:=https://ogris.de/grapheqd/
-PKG_HASH:=2c1d7f152c2554d1bfd80f3061e9be95a363a33da89da4b71687b7c35381fc5c
+PKG_HASH:=5e023367c138892a2236774dca51253df050dff2e6e7bd2d90637c3f19d8c802
 PKG_BUILD_DEPENDS:=alsa-lib openssl
 
 include $(INCLUDE_DIR)/package.mk
