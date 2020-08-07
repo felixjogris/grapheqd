@@ -1469,6 +1469,16 @@ static void create_helper_worker (void *(*start_routine)(void*), void *arg,
 {
   int res;
   pthread_t thread;
+  pthread_attr_t thread_attr;
+
+  res = pthread_attr_init(&thread_attr);
+  if (res != 0)
+    errx(1, "pthread_attr_init(): %s", strerror(res));
+
+  res = pthread_attr_setstacksize(&thread_attr, 5 * FFT_SIZE *
+                                                sizeof(kiss_fft_cpx));
+  if (res != 0)
+    errx(1, "pthread_attr_setstacksize(): %s", strerror(res));
 
   res = pthread_create(&thread, NULL, start_routine, arg);
   if (res != 0)
