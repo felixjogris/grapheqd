@@ -33,7 +33,7 @@
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "3"
+#define GRAPHEQD_VERSION "4"
 
 #define MAX_CHANNELS 2   /* stereo */
 #define SAMPLING_WIDTH 2 /* 16 bit signed LE per channel per sample */
