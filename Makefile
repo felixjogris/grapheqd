@@ -1,11 +1,13 @@
 CC ?= cc
 KISSFFT ?= ../kissfft
+USE_OSS ?= -DUSE_OSS
+USE_A52 ?= -DUSE_A52 -la52
 
 .PHONY:	clean install
 
 grapheqd:	grapheqd.c rootpage.h favicon.h \
 		$(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
-	$(CC) -DUSE_OSS -W -Wall -O3 -s -pipe -I$(KISSFFT) \
+	$(CC) $(USE_OSS) $(USE_A52) -W -Wall -O3 -s -pipe -I$(KISSFFT) \
         -o $@ grapheqd.c $(KISSFFT)/kiss_fft.c \
         -lm -lpthread -lcrypto
 
