@@ -1,15 +1,17 @@
 CC ?= cc
+CFLAGS = -W -Wall -O3 -pipe -s -DUSE_OSS
 KISSFFT ?= ../kissfft
-USE_OSS ?= -DUSE_OSS
-USE_A52 ?= -DUSE_A52 -la52
+.ifdef USE_A52
+  CFLAGS += -DUSE_A52 -I/usr/local/include -L/usr/local/lib -la52
+.endif
 
 .PHONY:	clean install
 
 grapheqd:	grapheqd.c rootpage.h favicon.h \
 		$(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
-	$(CC) $(USE_OSS) $(USE_A52) -W -Wall -O3 -s -pipe -I$(KISSFFT) \
+	$(CC) $(CFLAGS) -I$(KISSFFT) \
         -o $@ grapheqd.c $(KISSFFT)/kiss_fft.c \
-        -lm -lpthread -lcrypto
+        -lcrypto -lm -lpthread
 
 rootpage.h:	rootpage.html bin2c.pl
 	perl bin2c.pl rootpage.html "text/html; charset=utf8" rootpage

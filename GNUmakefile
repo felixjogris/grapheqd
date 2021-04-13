@@ -1,4 +1,5 @@
 CC ?= cc
+CFLAGS = -W -Wall -O3 -pipe -s
 KISSFFT ?= ../kissfft
 
 ifdef USE_SYSTEMD
@@ -7,12 +8,15 @@ endif
 ifdef BUILD_ROOT
   CFLAGS += -I$(BUILD_ROOT)/usr/include -L$(BUILD_ROOT)/usr/lib
 endif
+ifdef USE_A52
+  CFLAGS += -DUSE_A52 -la52
+endif
 
 .PHONY:	clean install package
 
 grapheqd:	grapheqd.c rootpage.h favicon.h \
 		$(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
-	$(CC) $(CFLAGS) -W -Wall -O3 -s -pipe -I$(KISSFFT) \
+	$(CC) $(CFLAGS) -I$(KISSFFT) \
         -o $@ grapheqd.c $(KISSFFT)/kiss_fft.c \
         -lasound -lcrypto -lm -lpthread
 

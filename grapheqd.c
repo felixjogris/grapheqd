@@ -28,7 +28,8 @@
 #  include <alsa/asoundlib.h>
 #endif
 #ifdef USE_A52
-#  include <a52.h>
+#  include <a52dec/a52.h>
+#  include <a52dec/mm_accel.h>
 #  define A52_MAX_FRAMESIZE 3840
 #else
 #  define A52_MAX_FRAMESIZE 0
@@ -46,7 +47,8 @@
 #define DISPLAY_BANDS 27 /* 27 horizontal bands/buckets per channel
                             displayed */
 #define DISPLAY_BARS 25  /* 25 vertical segments per band */
-#define FFT_SIZE 4096    /* must be power of 2   */
+#define FFT_SIZE 4096    /* must be power of 2 and should be a multiple of 256
+                            due to a52 */
 
 #define log_error(fmt, params ...) do { \
   if (foreground) \
@@ -550,12 +552,15 @@ static void fft_stereo (kiss_fft_cfg fft_cfg)
 #ifdef USE_A52
 static int fft_a52 (kiss_fft_cfg fft_cfg)
 {
-  int cur_pcm_idx, old_pcm_idx, frame_len, flags, sample_rate, bit_rate,
+  int i, cur_pcm_idx, old_pcm_idx, frame_len, flags, sample_rate, bit_rate,
       blocknum, samplenum;
+  static int totalsamplenum = 0;
   void *frame;
-  static void *pcm_start[2] = { &pcm_buf[0][A52_MAX_FRAMESIZE], &pcm_buf[1][A52_MAX_FRAMESIZE] };
-  static void *pcm_end[2] = { &pcm_buf[0][sizeof(pcm_buf[0])], &pcm_buf[1][sizeof(pcm_buf[1])] };
-  a52_state_t *state;
+  static void *pcm_start[2] = { &pcm_buf[0][A52_MAX_FRAMESIZE],
+                                &pcm_buf[1][A52_MAX_FRAMESIZE] };
+  static void *pcm_end[2] = { &pcm_buf[0][sizeof(pcm_buf[0])],
+                              &pcm_buf[1][sizeof(pcm_buf[1])] };
+  a52_state_t *state = NULL;
   sample_t level, *samples;
   kiss_fft_cpx fftin[2][FFT_SIZE], lout[FFT_SIZE], rout[FFT_SIZE];
   float llevel[FFT_SIZE / 2], rlevel[FFT_SIZE / 2];
@@ -564,7 +569,7 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
   old_pcm_idx = 1 - cur_pcm_idx;
 
   if (!state) {
-    state = a52_init();
+    state = a52_init(MM_ACCEL_X86_MMX);
     if (!state) {
       log_error("cannot initialize a52 output buffer: %s", strerror(errno));
       return -1;
@@ -601,7 +606,6 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
     return -1;
   }
 
-// TODO: need FFT_SIZE frames, not just 256
   for (blocknum = 0; blocknum < 2; blocknum++) {
     if (a52_block(state)) {
       log_error("cannot decode a52 block #%i", blocknum);
@@ -609,8 +613,8 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
     }
 
     for (samplenum = 0; samplenum < 256; samplenum++) {
-      fftin[blocknum][samplenum].r = *(samples + samplenum);
-      fftin[blocknum][samplenum].i = 0;
+      fftin[blocknum][totalsamplenum + samplenum].r = *(samples + samplenum);
+      fftin[blocknum][totalsamplenum + samplenum].i = 0;
     }
   }
 
@@ -620,6 +624,12 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
       return -1;
     }
   }
+
+  totalsamplenum += 256;
+  if (totalsamplenum < FFT_SIZE)
+    return 0;
+
+  totalsamplenum = 0;
 
   kiss_fft(fft_cfg, &fftin[0][0], &lout[0]);
   kiss_fft(fft_cfg, &fftin[1][0], &rout[0]);
