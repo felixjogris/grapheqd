@@ -588,6 +588,10 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
         return -1;
 
       frame_len = a52_syncinfo(frame, &flags, &sample_rate, &bit_rate);
+#if 0
+printf("frame_len=%d sample_rate=%d bit_rate=%d\n",
+       frame_len, sample_rate, bit_rate);
+#endif
     }
 
     if (frame + frame_len > pcm_end[old_pcm_idx]) {
@@ -776,18 +780,21 @@ static void *raw_recv (void *arg0)
     if (write_all(srv->socket, "r", 1)) {
       log_error("%s:%s: cannot xmit raw mode: %s",
                 srv->addr, srv->port, strerror(errno));
-      return 0;
+      close(srv->socket);
+      continue;
     }
 
     res = read_all(srv->socket, &buf[0], sizeof(buf));
     if (res < 0) {
       log_error("%s:%s: cannot recv sampling_channels and sampling_rate: %s",
                 srv->addr, srv->port, strerror(errno));
-      return 0;
+      close(srv->socket);
+      continue;
     }
     if (res > 0) {
       log_error("%s:%s: connection closed", srv->addr, srv->port);
-      return 0;
+      close(srv->socket);
+      continue;
     }
 
     sampling_channels = int16_tohost(&buf[0]);
@@ -796,12 +803,14 @@ static void *raw_recv (void *arg0)
     if (sampling_channels > MAX_CHANNELS) {
       log_error("%s:%s: %i channels, " STR(MAX_CHANNELS) " supported",
                 srv->addr, srv->port, sampling_channels);
-      return 0;
+      close(srv->socket);
+      continue;
     }
     if ((sampling_rate != 44100) && (sampling_rate != 48000)) {
       log_error("%s:%s: rate of %i Hz not supported",
                 srv->addr, srv->port, sampling_rate);
-      return 0;
+      close(srv->socket);
+      continue;
     }
 
     if (raw_recv_loop(srv))
