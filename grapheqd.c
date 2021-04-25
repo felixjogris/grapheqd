@@ -577,57 +577,59 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
     samples = a52_samples(state);
   }
 
-// TODO: maybe pcm_buf contains multiple frames
-  for (frame = pcm_start[old_pcm_idx], frame_len = 0; !frame_len; frame++) {
-    /* frame starts with 0x0b, 0x0x77 */
-    frame = memchr(frame, 0x0b, pcm_end[old_pcm_idx] - frame);
-    if (!frame)
-      return -1;
+  frame = pcm_start[old_pcm_idx];
+  pcm_start[old_pcm_idx] &pcm_buf[old_pcm_idx][A52_MAX_FRAMESIZE];
 
-    frame_len = a52_syncinfo(frame, &flags, &sample_rate, &bit_rate);
-  }
+  for (; totalsamplenum < FFT_SIZE; totalsamplenum += samplenum) {
+    for (frame_len = 0; !frame_len; frame++) {
+      /* frame starts with 0x0b, 0x0x77 */
+      frame = memchr(frame, 0x0b, pcm_end[old_pcm_idx] - frame);
+      if (!frame)
+        return -1;
 
-  if (frame + frame_len > pcm_end[old_pcm_idx]) {
-    /* if frame can't fit into old pcm_buf, i.e. exceeds it, then copy first
-       snippet of frame to the start of the other pcm_buf so that
-       raw_recv_loop()/pcm_worker_loop() start writing right after the end of
-       this frame snippet */
-    pcm_start[cur_pcm_idx] = &pcm_buf[cur_pcm_idx][A52_MAX_FRAMESIZE -
+      frame_len = a52_syncinfo(frame, &flags, &sample_rate, &bit_rate);
+    }
+
+    if (frame + frame_len > pcm_end[old_pcm_idx]) {
+      /* if frame can't fit into old pcm_buf, i.e. exceeds it, then copy first
+         snippet of frame to the start of the other pcm_buf so that
+         raw_recv_loop()/pcm_worker_loop() start writing right after the end
+         of this frame snippet */
+      pcm_start[cur_pcm_idx] = &pcm_buf[cur_pcm_idx][A52_MAX_FRAMESIZE -
                                               (pcm_end[old_pcm_idx] - frame)];
-    memcpy(pcm_start[cur_pcm_idx], frame, pcm_end[old_pcm_idx] - frame);
-    return 0;
-  }
+      memcpy(pcm_start[cur_pcm_idx], frame, pcm_end[old_pcm_idx] - frame);
+      return 0;
+    }
 
-  flags = A52_STEREO | A52_ADJUST_LEVEL;
-  level = 32767;
+    flags = A52_STEREO | A52_ADJUST_LEVEL;
+    level = 32767;
 
-  if (a52_frame(state, frame, &flags, &level, 0)) {
-    log_error("%s", "cannot decode a52 frame");
-    return -1;
-  }
-
-  for (blocknum = 0; blocknum < 2; blocknum++) {
-    if (a52_block(state)) {
-      log_error("cannot decode a52 block #%i", blocknum);
+    if (a52_frame(state, frame, &flags, &level, 0)) {
+      log_error("%s", "cannot decode a52 frame");
       return -1;
     }
 
-    for (samplenum = 0; samplenum < 256; samplenum++) {
-      fftin[blocknum][totalsamplenum + samplenum].r = *(samples + samplenum);
-      fftin[blocknum][totalsamplenum + samplenum].i = 0;
-    }
-  }
+    for (blocknum = 0; blocknum < 2; blocknum++) {
+      if (a52_block(state)) {
+        log_error("cannot decode a52 block #%i", blocknum);
+        return -1;
+      }
 
-  for (; blocknum < 6; blocknum++) {
-    if (a52_block(state)) {
-      log_error("cannot decode a52 block #%i", blocknum);
-      return -1;
+      for (samplenum = 0; samplenum < 256; samplenum++) {
+        fftin[blocknum][totalsamplenum + samplenum].r = *(samples + samplenum);
+        fftin[blocknum][totalsamplenum + samplenum].i = 0;
+      }
     }
-  }
 
-  totalsamplenum += 256;
-  if (totalsamplenum < FFT_SIZE)
-    return 0;
+    for (; blocknum < 6; blocknum++) {
+      if (a52_block(state)) {
+        log_error("cannot decode a52 block #%i", blocknum);
+        return -1;
+      }
+    }
+
+    frame++;
+  }
 
   totalsamplenum = 0;
 
