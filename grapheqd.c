@@ -40,7 +40,7 @@
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "4"
+#define GRAPHEQD_VERSION "5"
 
 #define MAX_CHANNELS 2   /* stereo */
 #define SAMPLING_WIDTH 2 /* 16 bit signed LE per channel per sample */
@@ -578,7 +578,7 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
   }
 
   frame = pcm_start[old_pcm_idx];
-  pcm_start[old_pcm_idx] &pcm_buf[old_pcm_idx][A52_MAX_FRAMESIZE];
+  pcm_start[old_pcm_idx] = &pcm_buf[old_pcm_idx][A52_MAX_FRAMESIZE];
 
   for (; totalsamplenum < FFT_SIZE; totalsamplenum += samplenum) {
     for (frame_len = 0; !frame_len; frame++) {
@@ -1742,7 +1742,7 @@ void close_sound (void *soundptr)
 static void show_help ()
 {
   puts(
-"graphedq version " GRAPHEQD_VERSION "\n"
+"grapheqd version " GRAPHEQD_VERSION "\n"
 "PCM driver: "
 #ifdef USE_OSS
 "OSS"

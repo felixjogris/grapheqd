@@ -1,24 +1,31 @@
 CC ?= cc
-CFLAGS = -W -Wall -O3 -pipe -s
+CFLAGS = -W -Wall -O3 -pipe
+LDFLAGS = -s
 KISSFFT ?= ../kissfft
 
 ifdef USE_SYSTEMD
   CFLAGS += -DUSE_SYSTEMD
 endif
 ifdef BUILD_ROOT
-  CFLAGS += -I$(BUILD_ROOT)/usr/include -L$(BUILD_ROOT)/usr/lib
+  CFLAGS += -I$(BUILD_ROOT)/usr/include
+  LDFLAGS += -L$(BUILD_ROOT)/usr/lib
 endif
 ifdef USE_A52
-  CFLAGS += -DUSE_A52 -la52
+  CFLAGS += -DUSE_A52
+  LDFLAGS += -la52
 endif
 
 .PHONY:	clean install package
 
-grapheqd:	grapheqd.c rootpage.h favicon.h \
-		$(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
-	$(CC) $(CFLAGS) -I$(KISSFFT) \
-        -o $@ grapheqd.c $(KISSFFT)/kiss_fft.c \
-        -lasound -lcrypto -lm -lpthread
+grapheqd:	grapheqd.o kiss_fft.o
+	$(CC) $(LDFLAGS) -o $@ grapheqd.o kiss_fft.o -lasound -lcrypto -lm \
+	-lpthread
+
+grapheqd.o:	grapheqd.c rootpage.h favicon.h $(KISSFFT)/kiss_fft.h
+	$(CC) $(CFLAGS) -I$(KISSFFT) -c -o $@ grapheqd.c
+
+kiss_fft.o:	 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
+	$(CC) $(CFLAGS) -I$(KISSFFT) -c -o $@ $(KISSFFT)/kiss_fft.c
 
 rootpage.h:	rootpage.html bin2c.pl
 	perl bin2c.pl rootpage.html "text/html; charset=utf8" rootpage
@@ -46,4 +53,4 @@ package:	clean
 	'/' openwrt/Makefile
 	sha256sum $(TMPDIR)/grapheqd-$(VERSION).tar.bz2
 
-clean: ;	-rm -v grapheqd
+clean: ;	-rm -v grapheqd *.o
