@@ -569,7 +569,7 @@ static int fft_a52 (kiss_fft_cfg fft_cfg)
   old_pcm_idx = 1 - cur_pcm_idx;
 
   if (!state) {
-    state = a52_init(MM_ACCEL_X86_MMX);
+    state = a52_init(MM_ACCEL_X86_MMX | MM_ACCEL_X86_MMXEXT);
     if (!state) {
       log_error("cannot initialize a52 output buffer: %s", strerror(errno));
       return -1;
@@ -1813,7 +1813,7 @@ int main (int argc, char **argv)
       case 'r': srv.port = optarg; break;
       case 's': soundcard = optarg; break;
       case 'u': user = get_user(optarg); break;
-      default: errx(1, "Unknown option '%i'. See -h for help.", res);
+      default: errx(1, "Unknown option '%c'. See -h for help.", optopt);
     }
   }
 
