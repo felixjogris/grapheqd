@@ -97,6 +97,15 @@ struct server {
   int socket;
 };
 
+struct soundcard {
+  char *name;
+#ifdef USE_OSS
+  int handle;
+#else
+  snd_pcm_t *handle;
+#endif
+};
+
 static int pcm_idx = 0;
 static unsigned char pcm_buf[2][FFT_SIZE * MAX_CHANNELS * SAMPLING_WIDTH +
                                 A52_MAX_FRAMESIZE];
@@ -830,16 +839,22 @@ ERROR:
 }
 
 #ifdef USE_OSS
-static int pcm_worker_loop (void *arg0)
+static int pcm_worker_loop (struct soundcard *soundcard)
 {
-  int *soundhandle = arg0;
   int res;
 
   while (num_clients > 0) {
-    if (read_all(*soundhandle, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
+    if (read_all(soundcard->handle, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
                  sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
-      log_error("cannot read pcm data: %s", strerror(errno));
-      return -1;
+      log_error("cannot read pcm data, reopening %s: %s",
+                soundcard->name, strerror(errno));
+      close_sound(soundcard);
+      open_sound(soundcard);
+      if (read_all(soundcard->handle, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
+                   sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
+        log_error("cannot read pcm data: %s", strerror(errno));
+        return -1;
+      }
     }
 
     pcm_idx = 1 - pcm_idx;
@@ -862,21 +877,20 @@ static int pcm_worker_loop (void *arg0)
   return 0;
 }
 #else /* ^USE_OSS / v!USE_OSS */
-static int pcm_worker_loop (void *arg0)
+static int pcm_worker_loop (struct soundcard *soundcard)
 {
-  snd_pcm_t *soundhandle = arg0;
   snd_pcm_sframes_t num_frames;
   int res;
 
   while (num_clients > 0) {
-    num_frames = snd_pcm_readi(soundhandle,
+    num_frames = snd_pcm_readi(soundcard->handle,
                                &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
                                FFT_SIZE);
 
     if (num_frames < 0) {
       /* retry */
-      snd_pcm_prepare(soundhandle);
-      num_frames = snd_pcm_readi(soundhandle,
+      snd_pcm_prepare(soundcard->handle);
+      num_frames = snd_pcm_readi(soundcard->handle,
                                  &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
                                  FFT_SIZE);
     }
@@ -1618,85 +1632,79 @@ static void create_helper_worker (void *(*start_routine)(void*), void *arg,
 }
 
 #ifdef USE_OSS
-static int *open_sound (const char *soundcard)
+static void open_sound (const struct soundcard *soundcard)
 {
-  int *fd;
   int format = AFMT_S16_LE;
   int res;
 
-  if (!soundcard)
-    soundcard = "/dev/dsp0";
+  if (!soundcard->name)
+    soundcard->name = "/dev/dsp0";
 
-  fd = malloc(sizeof(*fd));
-  if (fd == NULL)
-    errx(1, "malloc(): out of memory");
+  soundcard->handle = open(soundcard->name, O_RDONLY);
+  if (soundcard->handle < 0)
+    err(1, "cannot open %s for capturing", soundcard->name);
 
-  *fd = open(soundcard, O_RDONLY);
-  if (*fd < 0)
-    err(1, "cannot open %s for capturing", soundcard);
-
-  if (ioctl(*fd, SNDCTL_DSP_SETFMT, &format) == -1)
+  if (ioctl(soundcard->handle, SNDCTL_DSP_SETFMT, &format) == -1)
     err(1, "SNDCTL_DSP_SETFMT(AFTM_S16_LE)");
 
   sampling_channels = 2;
-  res = ioctl(*fd, SNDCTL_DSP_CHANNELS, &sampling_channels);
+  res = ioctl(soundcard->handle, SNDCTL_DSP_CHANNELS, &sampling_channels);
   if (res == -1) {
     warn("SNDCTL_DSP_CHANNELS(2)");
     sampling_channels = 1;
-    res = ioctl(*fd, SNDCTL_DSP_CHANNELS, &sampling_channels);
+    res = ioctl(soundcard->handle, SNDCTL_DSP_CHANNELS, &sampling_channels);
   }
   if (res == -1)
     err(1, "SNDCTL_DSP_CHANNELS(1)");
 
   sampling_rate = 44100;
-  res = ioctl(*fd, SNDCTL_DSP_SPEED, &sampling_rate);
+  res = ioctl(soundcard->handle, SNDCTL_DSP_SPEED, &sampling_rate);
   if (res == -1) {
     warn("SNDCTL_DSP_SPEED(44100)");
     sampling_rate = 48000;
-    res = ioctl(*fd, SNDCTL_DSP_SPEED, &sampling_rate);
+    res = ioctl(soundcard->handle, SNDCTL_DSP_SPEED, &sampling_rate);
   }
   if (res == -1)
     err(1, "SNDCTL_DSP_SPEED(48000)");
-
-  return fd;
 }
 
-void close_sound (void *soundptr)
+void close_sound (const struct soundcard *soundcard)
 {
-  int *fd = soundptr;
-  close(*fd);
-  free(fd);
+  close(soundcard->handle);
+  soundcard->handle = -1;
 }
 #else /* ^USE_OSS / v!USE_OSS */
-static void *open_sound (const char *soundcard)
+static void open_sound (const struct soundcard *soundcard)
 {
-  snd_pcm_t *handle;
   snd_pcm_hw_params_t *params;
   int err;
   snd_pcm_format_t format;
 
-  if (!soundcard)
-    soundcard = "hw:0";
+  if (!soundcard->name)
+    soundcard->name = "hw:0";
 
-  err = snd_pcm_open(&handle, soundcard, SND_PCM_STREAM_CAPTURE, 0);
+  err = snd_pcm_open(&soundcard->handle, soundcard->name,
+                     SND_PCM_STREAM_CAPTURE, 0);
   if (err)
-    errx(1, "cannot open %s for capturing: %s", soundcard, snd_strerror(err));
+    errx(1, "cannot open %s for capturing: %s",
+            soundcard->name, snd_strerror(err));
 
   err = snd_pcm_hw_params_malloc(&params);
   if (err)
     errx(1, "snd_pcm_hw_params_malloc(): %s", snd_strerror(err));
 
-  err = snd_pcm_hw_params_any(handle, params);
+  err = snd_pcm_hw_params_any(soundcard->handle, params);
   if (err)
     errx(1, "snd_pcm_hw_params_any(): %s", snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_access(handle, params,
+  err = snd_pcm_hw_params_set_access(soundcard->handle, params,
                                      SND_PCM_ACCESS_RW_INTERLEAVED);
   if (err)
     errx(1, "snd_pcm_hw_params_set_access(INTERLEAVED): %s",
             snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_format(handle, params, SND_PCM_FORMAT_S16_LE);
+  err = snd_pcm_hw_params_set_format(soundcard->handle, params,
+                                     SND_PCM_FORMAT_S16_LE);
   if (err)
     warnx("snd_pcm_hw_params_set_format(SND_PCM_FORMAT_S16_LE): %s",
           snd_strerror(err));
@@ -1709,42 +1717,42 @@ static void *open_sound (const char *soundcard)
     errx(1, "sampling format is not SND_PCM_FORMAT_S16_LE");
 
   sampling_channels = 2;
-  err = snd_pcm_hw_params_set_channels(handle, params, 2);
+  err = snd_pcm_hw_params_set_channels(soundcard->handle, params, 2);
   if (err) {
     warnx("snd_pcm_hw_params_set_channels(2): %s", snd_strerror(err));
     sampling_channels = 1;
-    err = snd_pcm_hw_params_set_channels(handle, params, 1);
+    err = snd_pcm_hw_params_set_channels(soundcard->handle, params, 1);
   }
   if (err)
     errx(1, "snd_pcm_hw_params_set_channels(1): %s", snd_strerror(err));
 
   sampling_rate = 44100;
-  err = snd_pcm_hw_params_set_rate(handle, params, 44100, 0);
+  err = snd_pcm_hw_params_set_rate(soundcard->handle, params, 44100, 0);
   if (err) {
     warnx("snd_pcm_hw_params_set_rate(44100): %s", snd_strerror(err));
     sampling_rate = 48000;
-    err = snd_pcm_hw_params_set_rate(handle, params, 48000, 0);
+    err = snd_pcm_hw_params_set_rate(soundcard->handle, params, 48000, 0);
   }
   if (err)
     errx(1, "snd_pcm_hw_params_set_rate(48000): %s", snd_strerror(err));
 
-  err = snd_pcm_hw_params_set_period_size(handle, params, FFT_SIZE, 0);
+  err = snd_pcm_hw_params_set_period_size(soundcard->handle, params,
+                                          FFT_SIZE, 0);
   if (err)
     errx(1, "snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) "): %s",
             snd_strerror(err));
 
-  err = snd_pcm_hw_params(handle, params);
+  err = snd_pcm_hw_params(soundcard->handle, params);
   if (err)
     errx(1, "snd_pcm_hw_params(): %s", snd_strerror(err));
 
   snd_pcm_hw_params_free(params);
-
-  return handle;
 }
 
-void close_sound (void *soundptr)
+void close_sound (const struct soundcard *soundcard)
 {
-  snd_pcm_close((snd_pcm_t*) soundptr);
+  snd_pcm_close(soundcard->handle);
+  soundcard->handle = NULL;
 }
 #endif /* !USE_OSS */
 
@@ -1794,12 +1802,11 @@ static void show_help ()
 int main (int argc, char **argv)
 {
   int res, listen_socket;
-  char *address = "0.0.0.0", *port = "8083", *pidfile = NULL,
-       *soundcard = NULL;
+  char *address = "0.0.0.0", *port = "8083", *pidfile = NULL;
+  struct soundcard soundcard = { 0, 0 };
   const char *err;
   struct server srv = { 0 };
   struct passwd *user = NULL;
-  void *soundptr = NULL;
   kiss_fft_cfg fft_cfg;
 
   while ((res = getopt(argc, argv, "a:c:dhl:p:r:s:u:")) != -1) {
@@ -1811,7 +1818,7 @@ int main (int argc, char **argv)
       case 'l': port = optarg; break;
       case 'p': pidfile = optarg; break;
       case 'r': srv.port = optarg; break;
-      case 's': soundcard = optarg; break;
+      case 's': soundcard.name = optarg; break;
       case 'u': user = get_user(optarg); break;
       default: errx(1, "Unknown option '%c'. See -h for help.", optopt);
     }
@@ -1819,14 +1826,14 @@ int main (int argc, char **argv)
 
   if (!srv.addr && srv.port)
     errx(1, "option -r requires -c");
-  if ((srv.addr || srv.port) && soundcard)
+  if ((srv.addr || srv.port) && soundcard.name)
     errx(1, "option -c/-r and -s are mutually exclusive");
   if (!srv.port)
     srv.port = "8083";
 
   listen_socket = create_listen_socket_inet(address, port);
   if (!srv.addr)
-    soundptr = open_sound(soundcard);
+    open_sound(&soundcard);
 
   if (!foreground)
     daemonize();
@@ -1848,7 +1855,7 @@ int main (int argc, char **argv)
     close(srv.socket);
     create_helper_worker(&raw_recv, &srv, "recv");
   } else
-    create_helper_worker(&pcm_worker, soundptr, "pcm");
+    create_helper_worker(&pcm_worker, &soundcard, "pcm");
 
   create_helper_worker(&fft_worker, fft_cfg, "fft");
 
@@ -1874,7 +1881,7 @@ int main (int argc, char **argv)
   if (srv.addr)
     close(srv.socket);
   else
-    close_sound(soundptr);
+    close_sound(&soundcard);
 
   close(listen_socket);
 
