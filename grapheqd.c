@@ -51,26 +51,26 @@
                             due to a52 */
 
 #define log_error(fmt, params ...) do { \
-  if (foreground) \
-    warnx("%s (%s:%i): " fmt, \
-          __FUNCTION__, __FILE__, __LINE__, ## params); \
-  else \
+  if (log_to_syslog) \
     syslog(LOG_ERR, "%s (%s:%i): " fmt "\n", \
            __FUNCTION__, __FILE__, __LINE__, ## params); \
+  else \
+    warnx("%s (%s:%i): " fmt, \
+          __FUNCTION__, __FILE__, __LINE__, ## params); \
 } while (0)
 
 #define log_warn(fmt, params ...) do { \
-  if (foreground) \
-    warnx("%s (%s:%i): " fmt, \
-          __FUNCTION__, __FILE__, __LINE__, ## params); \
-  else \
+  if (log_to_syslog) \
     syslog(LOG_WARNING, "%s (%s:%i): " fmt "\n", \
            __FUNCTION__, __FILE__, __LINE__, ## params); \
+  else \
+    warnx("%s (%s:%i): " fmt, \
+          __FUNCTION__, __FILE__, __LINE__, ## params); \
 } while (0)
 
 #define log_info(fmt, params ...) do { \
-  if (foreground) printf(fmt "\n", ## params); \
-  else syslog(LOG_INFO, fmt "\n", ## params); \
+  if (log_to_syslog) syslog(LOG_INFO, fmt "\n", ## params); \
+  else printf(fmt "\n", ## params); \
 } while (0)
 
 /* integer to string by preprocessor */
@@ -130,7 +130,7 @@ static int sampling_channels;
 /* used by main() and quitterm_handler() */
 static int running = 1;
 /* used by main() and log_*() macros */
-static int foreground = 0;
+static int log_to_syslog = 0;
 /* kiss_fft emits 131072 when fed with a pure sine, so it's a good starting
    point */
 static float max_level = 131072.;
@@ -839,6 +839,66 @@ ERROR:
 }
 
 #ifdef USE_OSS
+static int open_sound (struct soundcard * const soundcard)
+{
+  int format = AFMT_S16_LE;
+  int res;
+
+  if (!soundcard->name)
+    soundcard->name = "/dev/dsp0";
+
+  soundcard->handle = open(soundcard->name, O_RDONLY);
+  if (soundcard->handle < 0) {
+    log_error("cannot open %s for capturing", soundcard->name);
+    goto OSS_OPEN_SOUND_ERROR0;
+  }
+
+  if (ioctl(soundcard->handle, SNDCTL_DSP_SETFMT, &format) == -1) {
+    log_error("%s", "SNDCTL_DSP_SETFMT(AFTM_S16_LE)");
+    goto OSS_OPEN_SOUND_ERROR1;
+  }
+
+  sampling_channels = 2;
+  res = ioctl(soundcard->handle, SNDCTL_DSP_CHANNELS, &sampling_channels);
+  if (res == -1) {
+    log_warn("%s", "SNDCTL_DSP_CHANNELS(2)");
+    sampling_channels = 1;
+    res = ioctl(soundcard->handle, SNDCTL_DSP_CHANNELS, &sampling_channels);
+  }
+  if (res == -1) {
+    log_error("%s", "SNDCTL_DSP_CHANNELS(1)");
+    goto OSS_OPEN_SOUND_ERROR1;
+  }
+
+  sampling_rate = 44100;
+  res = ioctl(soundcard->handle, SNDCTL_DSP_SPEED, &sampling_rate);
+  if (res == -1) {
+    log_warn("%s", "SNDCTL_DSP_SPEED(44100)");
+    sampling_rate = 48000;
+    res = ioctl(soundcard->handle, SNDCTL_DSP_SPEED, &sampling_rate);
+  }
+  if (res == -1) {
+    log_error("%s", "SNDCTL_DSP_SPEED(48000)");
+    goto OSS_OPEN_SOUND_ERROR1;
+  }
+
+  return 0;
+
+OSS_OPEN_SOUND_ERROR1:
+  close(soundcard->handle);
+
+OSS_OPEN_SOUND_ERROR0:
+  soundcard->handle = -1;
+
+  return -1;
+}
+
+void close_sound (struct soundcard * const soundcard)
+{
+  close(soundcard->handle);
+  soundcard->handle = -1;
+}
+
 static int pcm_worker_loop (struct soundcard *soundcard)
 {
   int res;
@@ -848,8 +908,11 @@ static int pcm_worker_loop (struct soundcard *soundcard)
                  sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
       log_error("cannot read pcm data, reopening %s: %s",
                 soundcard->name, strerror(errno));
+
       close_sound(soundcard);
-      open_sound(soundcard);
+      if (open_sound(soundcard))
+        return -1;
+
       if (read_all(soundcard->handle, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
                    sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
         log_error("cannot read pcm data: %s", strerror(errno));
@@ -877,6 +940,120 @@ static int pcm_worker_loop (struct soundcard *soundcard)
   return 0;
 }
 #else /* ^USE_OSS / v!USE_OSS */
+static int open_sound (struct soundcard * const soundcard)
+{
+  snd_pcm_hw_params_t *params;
+  int err = 0;
+  snd_pcm_format_t format;
+
+  if (!soundcard->name)
+    soundcard->name = "hw:0";
+
+  err = snd_pcm_open(&soundcard->handle, soundcard->name,
+                     SND_PCM_STREAM_CAPTURE, 0);
+  if (err) {
+    log_error("cannot open %s for capturing: %s",
+              soundcard->name, snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR0;
+  }
+
+  err = snd_pcm_hw_params_malloc(&params);
+  if (err) {
+    log_error("snd_pcm_hw_params_malloc(): %s", snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR1;
+  }
+
+  err = snd_pcm_hw_params_any(soundcard->handle, params);
+  if (err)
+    log_error("snd_pcm_hw_params_any(): %s", snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  err = snd_pcm_hw_params_set_access(soundcard->handle, params,
+                                     SND_PCM_ACCESS_RW_INTERLEAVED);
+  if (err) {
+    log_error("snd_pcm_hw_params_set_access(INTERLEAVED): %s",
+              snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  err = snd_pcm_hw_params_set_format(soundcard->handle, params,
+                                     SND_PCM_FORMAT_S16_LE);
+  if (err) {
+    log_warn("snd_pcm_hw_params_set_format(SND_PCM_FORMAT_S16_LE): %s",
+             snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  err = snd_pcm_hw_params_get_format(params, &format);
+  if (err) {
+    log_error("snd_pcm_hw_params_get_format(): %s", snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  if (format != SND_PCM_FORMAT_S16_LE) {
+    log_error("%s", "sampling format is not SND_PCM_FORMAT_S16_LE");
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  sampling_channels = 2;
+  err = snd_pcm_hw_params_set_channels(soundcard->handle, params, 2);
+  if (err) {
+    log_warn("snd_pcm_hw_params_set_channels(2): %s", snd_strerror(err));
+    sampling_channels = 1;
+    err = snd_pcm_hw_params_set_channels(soundcard->handle, params, 1);
+  }
+  if (err) {
+    log_error("snd_pcm_hw_params_set_channels(1): %s", snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  sampling_rate = 44100;
+  err = snd_pcm_hw_params_set_rate(soundcard->handle, params, 44100, 0);
+  if (err) {
+    log_warn("snd_pcm_hw_params_set_rate(44100): %s", snd_strerror(err));
+    sampling_rate = 48000;
+    err = snd_pcm_hw_params_set_rate(soundcard->handle, params, 48000, 0);
+  }
+  if (err) {
+    log_error("snd_pcm_hw_params_set_rate(48000): %s", snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  err = snd_pcm_hw_params_set_period_size(soundcard->handle, params,
+                                          FFT_SIZE, 0);
+  if (err) {
+    log_error("snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) "): %s",
+              snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  err = snd_pcm_hw_params(soundcard->handle, params);
+  if (err) {
+    log_error("snd_pcm_hw_params(): %s", snd_strerror(err));
+    goto ALSA_OPEN_SOUND_ERROR2;
+  }
+
+  return 0;
+
+ALSA_OPEN_SOUND_ERROR2:
+  snd_pcm_hw_params_free(params);
+
+ALSA_OPEN_SOUND_ERROR1:
+  snd_pcm_close(soundcard->handle);
+
+ALSA_OPEN_SOUND_ERROR0:
+  soundcard->handle = NULL;
+
+  return err;
+}
+
+void close_sound (struct soundcard * const soundcard)
+{
+  snd_pcm_close(soundcard->handle);
+  soundcard->handle = NULL;
+}
+
 static int pcm_worker_loop (struct soundcard *soundcard)
 {
   snd_pcm_sframes_t num_frames;
@@ -1631,131 +1808,6 @@ static void create_helper_worker (void *(*start_routine)(void*), void *arg,
     errx(1, "cannot create %s worker thread: %s", name, strerror(res));
 }
 
-#ifdef USE_OSS
-static void open_sound (const struct soundcard *soundcard)
-{
-  int format = AFMT_S16_LE;
-  int res;
-
-  if (!soundcard->name)
-    soundcard->name = "/dev/dsp0";
-
-  soundcard->handle = open(soundcard->name, O_RDONLY);
-  if (soundcard->handle < 0)
-    err(1, "cannot open %s for capturing", soundcard->name);
-
-  if (ioctl(soundcard->handle, SNDCTL_DSP_SETFMT, &format) == -1)
-    err(1, "SNDCTL_DSP_SETFMT(AFTM_S16_LE)");
-
-  sampling_channels = 2;
-  res = ioctl(soundcard->handle, SNDCTL_DSP_CHANNELS, &sampling_channels);
-  if (res == -1) {
-    warn("SNDCTL_DSP_CHANNELS(2)");
-    sampling_channels = 1;
-    res = ioctl(soundcard->handle, SNDCTL_DSP_CHANNELS, &sampling_channels);
-  }
-  if (res == -1)
-    err(1, "SNDCTL_DSP_CHANNELS(1)");
-
-  sampling_rate = 44100;
-  res = ioctl(soundcard->handle, SNDCTL_DSP_SPEED, &sampling_rate);
-  if (res == -1) {
-    warn("SNDCTL_DSP_SPEED(44100)");
-    sampling_rate = 48000;
-    res = ioctl(soundcard->handle, SNDCTL_DSP_SPEED, &sampling_rate);
-  }
-  if (res == -1)
-    err(1, "SNDCTL_DSP_SPEED(48000)");
-}
-
-void close_sound (const struct soundcard *soundcard)
-{
-  close(soundcard->handle);
-  soundcard->handle = -1;
-}
-#else /* ^USE_OSS / v!USE_OSS */
-static void open_sound (const struct soundcard *soundcard)
-{
-  snd_pcm_hw_params_t *params;
-  int err;
-  snd_pcm_format_t format;
-
-  if (!soundcard->name)
-    soundcard->name = "hw:0";
-
-  err = snd_pcm_open(&soundcard->handle, soundcard->name,
-                     SND_PCM_STREAM_CAPTURE, 0);
-  if (err)
-    errx(1, "cannot open %s for capturing: %s",
-            soundcard->name, snd_strerror(err));
-
-  err = snd_pcm_hw_params_malloc(&params);
-  if (err)
-    errx(1, "snd_pcm_hw_params_malloc(): %s", snd_strerror(err));
-
-  err = snd_pcm_hw_params_any(soundcard->handle, params);
-  if (err)
-    errx(1, "snd_pcm_hw_params_any(): %s", snd_strerror(err));
-
-  err = snd_pcm_hw_params_set_access(soundcard->handle, params,
-                                     SND_PCM_ACCESS_RW_INTERLEAVED);
-  if (err)
-    errx(1, "snd_pcm_hw_params_set_access(INTERLEAVED): %s",
-            snd_strerror(err));
-
-  err = snd_pcm_hw_params_set_format(soundcard->handle, params,
-                                     SND_PCM_FORMAT_S16_LE);
-  if (err)
-    warnx("snd_pcm_hw_params_set_format(SND_PCM_FORMAT_S16_LE): %s",
-          snd_strerror(err));
-
-  err = snd_pcm_hw_params_get_format(params, &format);
-  if (err)
-    errx(1, "%s: %s", "snd_pcm_hw_params_get_format()", snd_strerror(err));
-
-  if (format != SND_PCM_FORMAT_S16_LE)
-    errx(1, "sampling format is not SND_PCM_FORMAT_S16_LE");
-
-  sampling_channels = 2;
-  err = snd_pcm_hw_params_set_channels(soundcard->handle, params, 2);
-  if (err) {
-    warnx("snd_pcm_hw_params_set_channels(2): %s", snd_strerror(err));
-    sampling_channels = 1;
-    err = snd_pcm_hw_params_set_channels(soundcard->handle, params, 1);
-  }
-  if (err)
-    errx(1, "snd_pcm_hw_params_set_channels(1): %s", snd_strerror(err));
-
-  sampling_rate = 44100;
-  err = snd_pcm_hw_params_set_rate(soundcard->handle, params, 44100, 0);
-  if (err) {
-    warnx("snd_pcm_hw_params_set_rate(44100): %s", snd_strerror(err));
-    sampling_rate = 48000;
-    err = snd_pcm_hw_params_set_rate(soundcard->handle, params, 48000, 0);
-  }
-  if (err)
-    errx(1, "snd_pcm_hw_params_set_rate(48000): %s", snd_strerror(err));
-
-  err = snd_pcm_hw_params_set_period_size(soundcard->handle, params,
-                                          FFT_SIZE, 0);
-  if (err)
-    errx(1, "snd_pcm_hw_params_set_period_size(" STR(FFT_SIZE) "): %s",
-            snd_strerror(err));
-
-  err = snd_pcm_hw_params(soundcard->handle, params);
-  if (err)
-    errx(1, "snd_pcm_hw_params(): %s", snd_strerror(err));
-
-  snd_pcm_hw_params_free(params);
-}
-
-void close_sound (const struct soundcard *soundcard)
-{
-  snd_pcm_close(soundcard->handle);
-  soundcard->handle = NULL;
-}
-#endif /* !USE_OSS */
-
 static void show_help ()
 {
   puts(
@@ -1801,7 +1853,7 @@ static void show_help ()
 
 int main (int argc, char **argv)
 {
-  int res, listen_socket;
+  int res, listen_socket, foreground = 0;
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL;
   struct soundcard soundcard = { 0, 0 };
   const char *err;
@@ -1833,7 +1885,8 @@ int main (int argc, char **argv)
 
   listen_socket = create_listen_socket_inet(address, port);
   if (!srv.addr)
-    open_sound(&soundcard);
+    if (open_sound(&soundcard))
+      return -1;
 
   if (!foreground)
     daemonize();
@@ -1863,6 +1916,7 @@ int main (int argc, char **argv)
 
   if (!foreground) {
     openlog("grapheqd", LOG_NDELAY|LOG_PID, LOG_DAEMON);
+    log_to_syslog = 1;
     close(0); close(1); close(2);
   }
 
