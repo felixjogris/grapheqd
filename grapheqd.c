@@ -906,8 +906,8 @@ static int pcm_worker_loop (struct soundcard *soundcard)
   while (num_clients > 0) {
     if (read_all(soundcard->handle, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
                  sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
-      log_error("cannot read pcm data, reopening %s: %s",
-                soundcard->name, strerror(errno));
+      log_error("cannot read pcm data: %s; reopening %s",
+                strerror(errno), soundcard->name);
 
       close_sound(soundcard);
       if (open_sound(soundcard))
@@ -1943,7 +1943,7 @@ int main (int argc, char **argv)
     unlink(pidfile); /* may fail, e.g. due to changed user privs */
 
   log_info("exiting...");
-  if (!foreground)
+  if (log_to_syslog)
     closelog();
 
   return 0;
