@@ -1647,6 +1647,7 @@ static int wait_for_client (int listen_socket)
   FD_ZERO(&rfds);
   FD_SET(listen_socket, &rfds);
   timeout.tv_sec = 2;
+  timeout.tv_usec = 0;
 
   res = select(listen_socket + 1, &rfds, NULL, NULL, &timeout);
 
