@@ -2,9 +2,18 @@
 
 export PATH=/usr/local/bin:$PATH
 
-# grapheqd's pcm "protocol" (little endian):
-# # of channels (2 bytes)
-# sampling rate (4 bytes)
+# grapheqd's raw "protocol" (little endian):
+# c -> s: 'r'
+# s -> c:
+#   # of channels (2 bytes)
+#   sampling rate (4 bytes)
+#   ...pcm data...
+
+cmd=`dd bs=1 count=1 status=none 2>&1`
+if [ "$cmd" != "r" ]; then
+  logger -i -p daemon.info -t "$0" "Unsupported command: $cmd"
+  exit
+fi
 
 mixersettings=`mixer -s 2>/dev/null`
 mixer =rec pcm2 >/dev/null 2>&1
@@ -26,8 +35,7 @@ if [ -n "$rate" -a -n "$ac" -a -n "$channels" ]; then
   ffmpeg -nostdin -abort_on empty_output -loglevel quiet -i /dev/dsp0 \
          -ac "$ac" -c:a pcm_s16le -f s16le - 2>/dev/null
 else
-  (echo -n "Unsupported rate and/or channels: "
-   echo "$probe") | logger -i -p daemon.info -t "$0"
+  logger -i -p daemon.info -t "$0" "Unsupported rate and/or channels: $probe"
 fi
 
 mixer $mixersettings >/dev/null 2>&1

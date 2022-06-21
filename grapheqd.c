@@ -1642,11 +1642,13 @@ static int wait_for_client (int listen_socket)
 {
   int res;
   fd_set rfds;
+  struct timeval timeout;
 
   FD_ZERO(&rfds);
   FD_SET(listen_socket, &rfds);
+  timeout.tv_sec = 2;
 
-  res = select(listen_socket + 1, &rfds, NULL, NULL, NULL);
+  res = select(listen_socket + 1, &rfds, NULL, NULL, &timeout);
 
   if (res > 0) {
     res = create_client_worker(listen_socket);
