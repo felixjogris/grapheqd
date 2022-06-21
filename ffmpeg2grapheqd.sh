@@ -10,6 +10,7 @@ export PATH=/usr/local/bin:$PATH
 #   ...pcm data...
 
 cmd=`dd bs=1 count=1 status=none 2>&1`
+[ -z "$cmd" ] && exit
 if [ "$cmd" != "r" ]; then
   logger -i -p daemon.info -t "$0" "Unsupported command: $cmd"
   exit
