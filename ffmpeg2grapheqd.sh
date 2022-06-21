@@ -23,9 +23,10 @@ elif [ "$ac" = "2" ]; then
 fi
 if [ -n "$rate" -a -n "$ac" -a -n "$channels" ]; then
   printf "${channels}${rate}"
-  ffmpeg -loglevel quiet -i /dev/dsp0 -ac "$ac" -c:a pcm_s16le -f s16le - 2>/dev/null
+  ffmpeg -nostdin -abort_on empty_output -loglevel quiet -i /dev/dsp0 \
+         -ac "$ac" -c:a pcm_s16le -f s16le - 2>/dev/null
 else
-  (echo "Unsupported rate and/or channels:"
+  (echo -n "Unsupported rate and/or channels: "
    echo "$probe") | logger -i -p daemon.info -t "$0"
 fi
 

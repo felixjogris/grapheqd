@@ -2,10 +2,6 @@ CC ?= cc
 CFLAGS = -W -Wall -O3 -pipe -DUSE_OSS
 LDFLAGS = -s
 KISSFFT ?= ../kissfft
-.ifdef USE_A52
-  CFLAGS += -DUSE_A52 -I/usr/local/include
-  LDFLAGS += -L/usr/local/lib -la52
-.endif
 
 .PHONY:	clean install
 

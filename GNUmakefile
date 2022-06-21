@@ -10,10 +10,6 @@ ifdef BUILD_ROOT
   CFLAGS += -I$(BUILD_ROOT)/usr/include
   LDFLAGS += -L$(BUILD_ROOT)/usr/lib
 endif
-ifdef USE_A52
-  CFLAGS += -DUSE_A52
-  LDFLAGS += -la52
-endif
 
 .PHONY:	clean install package
 

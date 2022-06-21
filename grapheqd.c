@@ -27,13 +27,6 @@
 #else
 #  include <alsa/asoundlib.h>
 #endif
-#ifdef USE_A52
-#  include <a52dec/a52.h>
-#  include <a52dec/mm_accel.h>
-#  define A52_MAX_FRAMESIZE 3840
-#else
-#  define A52_MAX_FRAMESIZE 0
-#endif
 #include <openssl/sha.h>
 #include "kiss_fft.h"
 #ifdef USE_SYSTEMD
@@ -47,8 +40,7 @@
 #define DISPLAY_BANDS 27 /* 27 horizontal bands/buckets per channel
                             displayed */
 #define DISPLAY_BARS 25  /* 25 vertical segments per band */
-#define FFT_SIZE 4096    /* must be power of 2 and should be a multiple of 256
-                            due to a52 */
+#define FFT_SIZE 4096    /* must be power of 2 */
 
 #define log_error(fmt, params ...) do { \
   if (log_to_syslog) \
@@ -107,8 +99,7 @@ struct soundcard {
 };
 
 static int pcm_idx = 0;
-static unsigned char pcm_buf[2][FFT_SIZE * MAX_CHANNELS * SAMPLING_WIDTH +
-                                A52_MAX_FRAMESIZE];
+static unsigned char pcm_buf[2][FFT_SIZE * MAX_CHANNELS * SAMPLING_WIDTH];
 static pthread_mutex_t pcm_mtx = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t pcm_cond = PTHREAD_COND_INITIALIZER;
 static pthread_mutex_t fft_mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -171,8 +162,22 @@ int read_all (int socket, void *buf, size_t len)
 {
   size_t read_bytes;
   ssize_t res;
+  fd_set rfds;
+  struct timeval timeout;
 
   for (read_bytes = 0; read_bytes < len; read_bytes += res) {
+    FD_ZERO(&rfds);
+    FD_SET(socket, &rfds);
+    timeout.tv_sec = 60;
+
+    res = select(socket + 1, &rfds, NULL, NULL, &timeout);
+    if (res < 0)
+      return -1;
+    if (res == 0) {
+      errno = ETIMEDOUT;
+      return -1;
+    }
+
     res = read(socket, buf + read_bytes, len - read_bytes);
     if (res < 0)
       return -1;
@@ -506,8 +511,7 @@ static void fft_mono (kiss_fft_cfg fft_cfg)
 
   for (i = 0; i < FFT_SIZE; i++) {
     /* left channel */
-    lin[i].r = int16_tohost(&pcm_buf[old_pcm_idx][i * SAMPLING_WIDTH +
-                                                  A52_MAX_FRAMESIZE]);
+    lin[i].r = int16_tohost(&pcm_buf[old_pcm_idx][i * SAMPLING_WIDTH]);
     lin[i].i = 0;
   }
 
@@ -537,11 +541,11 @@ static void fft_stereo (kiss_fft_cfg fft_cfg)
   pos = 0;
   for (i = 0; i < FFT_SIZE; i++) {
     /* left channel */
-    lin[i].r = int16_tohost(&pcm_buf[old_pcm_idx][pos + A52_MAX_FRAMESIZE]);
+    lin[i].r = int16_tohost(&pcm_buf[old_pcm_idx][pos]);
     lin[i].i = 0;
     pos += SAMPLING_WIDTH;
     /* right channel */
-    rin[i].r = int16_tohost(&pcm_buf[old_pcm_idx][pos + A52_MAX_FRAMESIZE]);
+    rin[i].r = int16_tohost(&pcm_buf[old_pcm_idx][pos]);
     pos += SAMPLING_WIDTH;
     rin[i].i = 0;
   }
@@ -557,109 +561,6 @@ static void fft_stereo (kiss_fft_cfg fft_cfg)
   fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
   fill_bands(&rlevel, max_level, &display_buf[display_idx][1]);
 }
-
-#ifdef USE_A52
-static int fft_a52 (kiss_fft_cfg fft_cfg)
-{
-  int i, cur_pcm_idx, old_pcm_idx, frame_len, flags, sample_rate, bit_rate,
-      blocknum, samplenum;
-  static int totalsamplenum = 0;
-  void *frame;
-  static void *pcm_start[2] = { &pcm_buf[0][A52_MAX_FRAMESIZE],
-                                &pcm_buf[1][A52_MAX_FRAMESIZE] };
-  static void *pcm_end[2] = { &pcm_buf[0][sizeof(pcm_buf[0])],
-                              &pcm_buf[1][sizeof(pcm_buf[1])] };
-  a52_state_t *state = NULL;
-  sample_t level, *samples;
-  kiss_fft_cpx fftin[2][FFT_SIZE], lout[FFT_SIZE], rout[FFT_SIZE];
-  float llevel[FFT_SIZE / 2], rlevel[FFT_SIZE / 2];
-
-  cur_pcm_idx = pcm_idx;
-  old_pcm_idx = 1 - cur_pcm_idx;
-
-  if (!state) {
-    state = a52_init(MM_ACCEL_X86_MMX | MM_ACCEL_X86_MMXEXT);
-    if (!state) {
-      log_error("cannot initialize a52 output buffer: %s", strerror(errno));
-      return -1;
-    }
-    samples = a52_samples(state);
-  }
-
-  frame = pcm_start[old_pcm_idx];
-  pcm_start[old_pcm_idx] = &pcm_buf[old_pcm_idx][A52_MAX_FRAMESIZE];
-
-  for (; totalsamplenum < FFT_SIZE; totalsamplenum += samplenum) {
-    for (frame_len = 0; !frame_len; frame++) {
-      /* frame starts with 0x0b, 0x0x77 */
-      frame = memchr(frame, 0x0b, pcm_end[old_pcm_idx] - frame);
-      if (!frame)
-        return -1;
-
-      frame_len = a52_syncinfo(frame, &flags, &sample_rate, &bit_rate);
-#if 0
-printf("frame_len=%d sample_rate=%d bit_rate=%d\n",
-       frame_len, sample_rate, bit_rate);
-#endif
-    }
-
-    if (frame + frame_len > pcm_end[old_pcm_idx]) {
-      /* if frame can't fit into old pcm_buf, i.e. exceeds it, then copy first
-         snippet of frame to the start of the other pcm_buf so that
-         raw_recv_loop()/pcm_worker_loop() start writing right after the end
-         of this frame snippet */
-      pcm_start[cur_pcm_idx] = &pcm_buf[cur_pcm_idx][A52_MAX_FRAMESIZE -
-                                              (pcm_end[old_pcm_idx] - frame)];
-      memcpy(pcm_start[cur_pcm_idx], frame, pcm_end[old_pcm_idx] - frame);
-      return 0;
-    }
-
-    flags = A52_STEREO | A52_ADJUST_LEVEL;
-    level = 32767;
-
-    if (a52_frame(state, frame, &flags, &level, 0)) {
-      log_error("%s", "cannot decode a52 frame");
-      return -1;
-    }
-
-    for (blocknum = 0; blocknum < 2; blocknum++) {
-      if (a52_block(state)) {
-        log_error("cannot decode a52 block #%i", blocknum);
-        return -1;
-      }
-
-      for (samplenum = 0; samplenum < 256; samplenum++) {
-        fftin[blocknum][totalsamplenum + samplenum].r = *(samples + samplenum);
-        fftin[blocknum][totalsamplenum + samplenum].i = 0;
-      }
-    }
-
-    for (; blocknum < 6; blocknum++) {
-      if (a52_block(state)) {
-        log_error("cannot decode a52 block #%i", blocknum);
-        return -1;
-      }
-    }
-
-    frame++;
-  }
-
-  totalsamplenum = 0;
-
-  kiss_fft(fft_cfg, &fftin[0][0], &lout[0]);
-  kiss_fft(fft_cfg, &fftin[1][0], &rout[0]);
-
-  for (i = 0; i < FFT_SIZE / 2; i++) {
-    llevel[i] = calculate_power(lout[i], &max_level);
-    rlevel[i] = calculate_power(rout[i], &max_level);
-  }
-
-  fill_bands(&llevel, max_level, &display_buf[display_idx][0]);
-  fill_bands(&rlevel, max_level, &display_buf[display_idx][1]);
-
-  return 1;
-}
-#endif /* USE_A52 */
 
 static void *fft_worker (void *arg0)
 {
@@ -684,17 +585,6 @@ static void *fft_worker (void *arg0)
     if (num_clients <= raw_clients)
       continue;
 
-#ifdef USE_A52
-    res = fft_a52(fft_cfg);
-    if (!res) {
-      /* a52 detected, but not enough input frames yet to do fft */
-      continue;
-    }
-    if (res > 0) {
-      /* no-op, a52 detected and fft done */
-    }
-    else
-#endif
     if (sampling_channels == 1)
       fft_mono(fft_cfg);
     else
@@ -725,7 +615,7 @@ static int raw_recv_loop (struct server *srv)
   int res;
 
   while (num_clients > 0) {
-    res = read_all(srv->socket, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
+    res = read_all(srv->socket, &pcm_buf[pcm_idx][0],
                    sampling_channels * FFT_SIZE * SAMPLING_WIDTH);
     if (res < 0) {
       log_error("%s:%s: cannot recv pcm data: %s",
@@ -904,7 +794,7 @@ static int pcm_worker_loop (struct soundcard *soundcard)
   int res;
 
   while (num_clients > 0) {
-    if (read_all(soundcard->handle, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
+    if (read_all(soundcard->handle, &pcm_buf[pcm_idx][0],
                  sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
       log_error("cannot read pcm data: %s; reopening %s",
                 strerror(errno), soundcard->name);
@@ -913,7 +803,7 @@ static int pcm_worker_loop (struct soundcard *soundcard)
       if (open_sound(soundcard))
         return -1;
 
-      if (read_all(soundcard->handle, &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
+      if (read_all(soundcard->handle, &pcm_buf[pcm_idx][0],
                    sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
         log_error("cannot read pcm data: %s", strerror(errno));
         return -1;
@@ -1060,15 +950,13 @@ static int pcm_worker_loop (struct soundcard *soundcard)
   int res;
 
   while (num_clients > 0) {
-    num_frames = snd_pcm_readi(soundcard->handle,
-                               &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
+    num_frames = snd_pcm_readi(soundcard->handle, &pcm_buf[pcm_idx][0],
                                FFT_SIZE);
 
     if (num_frames < 0) {
       /* retry */
       snd_pcm_prepare(soundcard->handle);
-      num_frames = snd_pcm_readi(soundcard->handle,
-                                 &pcm_buf[pcm_idx][A52_MAX_FRAMESIZE],
+      num_frames = snd_pcm_readi(soundcard->handle, &pcm_buf[pcm_idx][0],
                                  FFT_SIZE);
     }
 
@@ -1610,7 +1498,7 @@ static void raw_xmit (struct client_worker_arg *arg)
     old_pcm_idx = pcm_idx;
     old_pcm_idx = 1 - old_pcm_idx;
 
-    if (write_all(arg->socket, &pcm_buf[old_pcm_idx][A52_MAX_FRAMESIZE],
+    if (write_all(arg->socket, &pcm_buf[old_pcm_idx][0],
                   sampling_channels * FFT_SIZE * SAMPLING_WIDTH)) {
       log_warn("cannot xmit pcm data");
       break;
