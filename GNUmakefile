@@ -31,10 +31,11 @@ favicon.h:	favicon.ico bin2c.pl
 
 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c: ;	git clone https://github.com/mborgerding/kissfft.git $(KISSFFT)
 
-install:	grapheqd grapheqd.service grapheqd.openrc
+install:	grapheqd grapheqd.service grapheqd.openrc ffmpeg2grapheqd.sh
 	install -d /usr/local/sbin
 	install grapheqd /usr/local/sbin/
 	install -m 0644 grapheqd.service /lib/systemd/system/ || install grapheqd.openrc /etc/init.d/grapheqd
+	install ffmpeg2grapheqd.sh /usr/local/libexec/
 
 package:	clean
 	$(eval VERSION=$(shell awk -F'"' '{if(/define\s+GRAPHEQD_VERSION/){print $$2}}' grapheqd.c))

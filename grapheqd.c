@@ -162,22 +162,8 @@ int read_all (int socket, void *buf, size_t len)
 {
   size_t read_bytes;
   ssize_t res;
-  fd_set rfds;
-  struct timeval timeout;
 
   for (read_bytes = 0; read_bytes < len; read_bytes += res) {
-    FD_ZERO(&rfds);
-    FD_SET(socket, &rfds);
-    timeout.tv_sec = 60;
-
-    res = select(socket + 1, &rfds, NULL, NULL, &timeout);
-    if (res < 0)
-      return -1;
-    if (res == 0) {
-      errno = ETIMEDOUT;
-      return -1;
-    }
-
     res = read(socket, buf + read_bytes, len - read_bytes);
     if (res < 0)
       return -1;

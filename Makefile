@@ -22,10 +22,11 @@ favicon.h:	favicon.ico bin2c.pl
 
 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c: ;	git clone https://github.com/mborgerding/kissfft.git $(KISSFFT)
 
-install:	grapheqd grapheqd.sh
+install:	grapheqd grapheqd.sh ffmpeg2grapheqd.sh
 	install -d /usr/local/sbin /usr/local/etc/rc.d
 	install grapheqd /usr/local/sbin/
 	install grapheqd.sh /usr/local/etc/rc.d/grapheqd
+	install ffmpeg2grapheqd.sh /usr/local/libexec/
 	-echo "Don't forget to enable grapheqd, e.g. by 'sysrc grapheqd_enable=YES'"
 
 clean: ;	-rm -v grapheqd *.o
