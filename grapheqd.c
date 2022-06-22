@@ -24,8 +24,10 @@
 #  include <pthread_np.h>
 #  include <sys/ioctl.h>
 #  include <sys/soundcard.h>
+#  define DEFAULT_SOUNDCARD "/dev/dsp0"
 #else
 #  include <alsa/asoundlib.h>
+#  define DEFAULT_SOUNDCARD "hw:0"
 #endif
 #include <openssl/sha.h>
 #include "kiss_fft.h"
@@ -84,9 +86,12 @@ typedef struct {
 } peak;
 
 struct server {
+  char is_program;
   char *addr;
   char *port;
-  int socket;
+  int rfd;
+  int wfd;
+  int pid;
 };
 
 struct soundcard {
@@ -241,6 +246,13 @@ static struct passwd *get_user (const char *username)
   return pw;
 }
 
+static char const *create_client_program (struct server * const srv)
+{
+  int s2c[2], c2s[2];
+
+  return "not yet";
+}
+
 static char const *create_client_socket_inet (struct server * const srv)
 {
   int client_socket, yes = 1, res;
@@ -265,7 +277,8 @@ static char const *create_client_socket_inet (struct server * const srv)
         close_on_exec(client_socket)) {
       close(client_socket);
     } else {
-      srv->socket = client_socket;
+      srv->rfd = client_socket;
+      srv->wfd = client_socket;
       break;
     }
   }
@@ -276,6 +289,27 @@ static char const *create_client_socket_inet (struct server * const srv)
   freeaddrinfo(result);
 
   return err;
+}
+
+static char const *create_client (struct server * const srv)
+{
+  return (srv->is_program ?
+          create_client_program(srv) :
+          create_client_socket_inet(srv));
+}
+
+static void close_client (struct server * const srv)
+{
+  close(srv->rfd);
+
+  if (srv->is_program) {
+    close(srv->wfd);
+//  wait(srv->pid);
+  }
+
+  srv->rfd = -1;
+  srv->wfd = -1;
+  srv->pid = -1;
 }
 
 static int create_listen_socket_inet (const char *ip, const char *port)
@@ -602,7 +636,7 @@ static int raw_recv_loop (struct server *srv)
   int res;
 
   while (num_clients > 0) {
-    res = read_all(srv->socket, &pcm_buf[pcm_idx][0],
+    res = read_all(srv->rfd, &pcm_buf[pcm_idx][0],
                    sampling_channels * FFT_SIZE * SAMPLING_WIDTH);
     if (res < 0) {
       log_error("%s:%s: cannot recv pcm data: %s",
@@ -662,23 +696,23 @@ static void *raw_recv (void *arg0)
       continue;
     }
 
-    if (write_all(srv->socket, "r", 1)) {
+    if (write_all(srv->wfd, "r", 1)) {
       log_error("%s:%s: cannot xmit raw mode: %s",
                 srv->addr, srv->port, strerror(errno));
-      close(srv->socket);
+      close_client(srv);
       continue;
     }
 
-    res = read_all(srv->socket, &buf[0], sizeof(buf));
+    res = read_all(srv->rfd, &buf[0], sizeof(buf));
     if (res < 0) {
       log_error("%s:%s: cannot recv sampling_channels and sampling_rate: %s",
                 srv->addr, srv->port, strerror(errno));
-      close(srv->socket);
+      close_client(srv);
       continue;
     }
     if (res > 0) {
       log_error("%s:%s: connection closed", srv->addr, srv->port);
-      close(srv->socket);
+      close_client(srv);
       continue;
     }
 
@@ -688,20 +722,20 @@ static void *raw_recv (void *arg0)
     if (sampling_channels > MAX_CHANNELS) {
       log_error("%s:%s: %i channels, " STR(MAX_CHANNELS) " supported",
                 srv->addr, srv->port, sampling_channels);
-      close(srv->socket);
+      close_client(srv);
       continue;
     }
     if ((sampling_rate != 44100) && (sampling_rate != 48000)) {
       log_error("%s:%s: rate of %i Hz not supported",
                 srv->addr, srv->port, sampling_rate);
-      close(srv->socket);
+      close_client(srv);
       continue;
     }
 
     if (raw_recv_loop(srv))
       break;
 
-    close(srv->socket);
+    close_client(srv);
   }
 
   res = pthread_mutex_unlock(&pcm_mtx);
@@ -719,9 +753,6 @@ static int open_sound (struct soundcard * const soundcard)
 {
   int format = AFMT_S16_LE;
   int res;
-
-  if (!soundcard->name)
-    soundcard->name = "/dev/dsp0";
 
   soundcard->handle = open(soundcard->name, O_RDONLY);
   if (soundcard->handle < 0) {
@@ -827,9 +858,6 @@ static int open_sound (struct soundcard * const soundcard)
   snd_pcm_hw_params_t *params;
   int err = 0;
   snd_pcm_format_t format;
-
-  if (!soundcard->name)
-    soundcard->name = "hw:0";
 
   err = snd_pcm_open(&soundcard->handle, soundcard->name,
                      SND_PCM_STREAM_CAPTURE, 0);
@@ -1711,31 +1739,37 @@ static void show_help ()
 "\n"
 "\n"
 "Usage:\n"
-"grapheqd [-a <address>] [-c <address>] [-d] [-l <port>] [-p <pid file>]\n"
-"         [-r <port>] [-s <soundcard>] [-u <user>]\n"
+"grapheqd [-a <address>] [-c <address>] [-d] [-e <program>] [-l <port>]\n"
+"         [-p <pid file>] [-r <port>] [-s <soundcard>] [-u <user>]\n"
 "grapheqd -h\n"
 "\n"
 "  -a <address>      listen on this address; default: 0.0.0.0\n"
-"  -c <address>      connect to another grapheqd running at this address, do\n"
-"                    not use any actual audio hardware; cannot be used in\n"
-"                    conjunction with option -s\n"
+"  -c <address>      connect to another grapheqd running at this address on\n"
+"                    port 8083 by default (use -r to connect to a different\n"
+"                    port)\n"
+"                    cannot be used in conjunction with either option -e or "
+                                                                        "-s\n"
 "  -d                run in foreground, and log to stdout/stderr, do not "
                                                                     "detach\n"
 "                    detach from terminal, do not log to syslog\n"
+"  -e <program>      read PCM data from this program's standard output; the\n"
+"                    name of the soundcard is passed as first commandline\n"
+"                    parameter to <program>\n"
+"                    cannot be used in conjunction with either option -c or "
+                                                                        "-r\n"
 "  -l <port>         listen on this port; default: 8083\n"
 "  -p <pid file>     daemonize and save pid to this file; no default, pid "
                                                                       "gets\n"
 "                    not written to any file\n"
-"  -r <port>         connect to a remote grapheqd on this port; default: "
-                                                                      "8083\n"
+"  -r <port>         connect to a remote grapheqd on this port; requires\n"
+"                    parameter -c;\n"
+"                    cannot be used in conjunction with either option -e or "
+                                                                        "-s\n"
 "  -s <soundcard>    read PCM from this soundcard; default: "
-#ifdef USE_OSS
-"/dev/dsp0"
-#else
-"hw:0"
-#endif
+DEFAULT_SOUNDCARD
 "; cannot\n"
-"                    be used in conjunction with either option -c or -r\n"
+"                    be used in conjunction with either option -c or -r; a\n"
+"                    program given via parameter -e takes precedence\n" 
 "  -u <user>         switch to this user; no default, run as invoking user\n"
 "  -h                show this help ;-)\n"
 );
@@ -1745,36 +1779,65 @@ int main (int argc, char **argv)
 {
   int res, listen_socket, foreground = 0;
   char *address = "0.0.0.0", *port = "8083", *pidfile = NULL;
-  struct soundcard soundcard = { 0, 0 };
+  struct soundcard soundcard = { 0 };
   const char *err;
-  struct server srv = { 0 };
+  struct server srv = { -1, 0, 0, -1, -1, -1 };
   struct passwd *user = NULL;
   kiss_fft_cfg fft_cfg;
 
-  while ((res = getopt(argc, argv, "a:c:dhl:p:r:s:u:")) != -1) {
+  while ((res = getopt(argc, argv, "a:c:de:hl:p:r:s:u:")) != -1) {
     switch (res) {
       case 'a': address = optarg; break;
-      case 'c': srv.addr = optarg; break;
+      case 'c':
+        if (srv.is_program > 0)
+          errx(1, "options -c and -e are mutually exclusive");
+        if (soundcard.name)
+          errx(1, "options -c and -s are mutually exclusive");
+        srv.addr = optarg;
+        srv.is_program = 0;
+        break;
       case 'd': foreground = 1; break;
+      case 'e':
+        if (!srv.is_program)
+          errx(1, "options -e and -c/-r and are mutually exclusive");
+        srv.addr = optarg;
+        srv.is_program = 1;
+        break;
       case 'h': show_help(); return 0;
       case 'l': port = optarg; break;
       case 'p': pidfile = optarg; break;
-      case 'r': srv.port = optarg; break;
-      case 's': soundcard.name = optarg; break;
+      case 'r':
+        if (srv.is_program > 0)
+          errx(1, "options -r and -e are mutually exclusive");
+        if (soundcard.name)
+          errx(1, "options -r and -s are mutually exclusive");
+        srv.port = optarg;
+        srv.is_program = 0;
+        break;
+      case 's':
+        if (!srv.is_program)
+          errx(1, "options -s and -c/-r are mutually exclusive");
+        soundcard.name = optarg;
+        break;
       case 'u': user = get_user(optarg); break;
       default: errx(1, "Unknown option '%c'. See -h for help.", optopt);
     }
   }
 
-  if (!srv.addr && srv.port)
-    errx(1, "option -r requires -c");
-  if ((srv.addr || srv.port) && soundcard.name)
-    errx(1, "option -c/-r and -s are mutually exclusive");
-  if (!srv.port)
-    srv.port = "8083";
+  if (!soundcard.name)
+    soundcard.name = DEFAULT_SOUNDCARD;
+
+  if (srv.is_program == 1) {
+    srv.port = soundcard.name;
+  } else if (!srv.is_program) {
+    if (!srv.addr)
+      errx(1, "option -r requires -c");
+    if (!srv.port)
+      srv.port = "8083";
+  }
 
   listen_socket = create_listen_socket_inet(address, port);
-  if (!srv.addr)
+  if (srv.is_program)
     if (open_sound(&soundcard))
       return -1;
 
@@ -1791,10 +1854,10 @@ int main (int argc, char **argv)
   if (!fft_cfg)
     errx(1, "cannot initialize FFT state");
 
-  if (srv.addr) {
-    if ((err = create_client_socket_inet(&srv)))
+  if (srv.is_program > -1) {
+    if ((err = create_client(&srv)))
       errx(1, "cannot connect to %s:%s: %s", srv.addr, srv.port, err);
-    close(srv.socket);
+    close_client(&srv);
     create_helper_worker(&raw_recv, &srv, "recv");
   } else
     create_helper_worker(&pcm_worker, &soundcard, "pcm");
@@ -1821,8 +1884,8 @@ int main (int argc, char **argv)
       running = 0;
   }
 
-  if (srv.addr)
-    close(srv.socket);
+  if (srv.is_program > -1)
+    close_client(&srv);
   else
     close_sound(&soundcard);
 
