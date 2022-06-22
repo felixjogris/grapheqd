@@ -248,9 +248,67 @@ static struct passwd *get_user (const char *username)
 
 static char const *create_client_program (struct server * const srv)
 {
-  int s2c[2], c2s[2];
+  int parent2child[2], child2parent[2];
+  char *err;
+  pid_t pid;
 
-  return "not yet";
+  if (pipe(parent2child)) {
+    err = strerror(errno);
+    goto CREATE_CLIENT_PROGRAM_ERROR0;
+  }
+
+  if (pipe(child2parent)) {
+    err = strerror(errno);
+    goto CREATE_CLIENT_PROGRAM_ERROR1;
+  }
+
+  pid = fork();
+  if (pid < 0) {
+    err = strerror(errno);
+    goto CREATE_CLIENT_PROGRAM_ERROR1;
+  }
+  if (pid == 0) {
+    close(child2parent[0]);
+    close(parent2child[1]);
+
+    if ((dup2(parent2child[0], 0) != 0) ||
+        (dup2(child2parent[1], 1) != 1)) {
+      log_error("dup2(): %s", strerror(errno));
+      exit(1);
+    }
+
+    if (log_to_syslog)
+      execve(srv->addr,
+             (char*[]){ srv->addr, srv->port, NULL },
+             (char*[]){ NULL }) :
+    else
+      execve(srv->addr,
+             (char*[]){ srv->addr, srv->port, "stderr", NULL },
+             (char*[]){ NULL });
+
+    log_error("%s: %s", srv->addr, strerror(errno));
+    exit(1);
+  }
+
+  close(child2parent[1]);
+  close(parent2child[0]);
+
+  srv->pid = pid;
+  srv->rfd = child2parent[0];
+  srv->wfd = parent2child[1];
+
+  return NULL;
+
+CREATE_CLIENT_PROGRAM_ERROR2:
+  close(child2parent[0]);
+  close(child2parent[1]);
+
+CREATE_CLIENT_PROGRAM_ERROR1:
+  close(parent2child[0]);
+  close(parent2child[1]);
+
+CREATE_CLIENT_PROGRAM_ERROR0:
+  return err;
 }
 
 static char const *create_client_socket_inet (struct server * const srv)
