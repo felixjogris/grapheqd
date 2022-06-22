@@ -1,6 +1,6 @@
 [Unit]
 Description=Graphical equalizer daemon
-Documentation=http://ogris.de/grapheqd/
+Documentation=https://ogris.de/grapheqd/
 Requires=local-fs.target
 Conflicts=shutdown.target
 
