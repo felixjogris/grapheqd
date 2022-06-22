@@ -188,6 +188,11 @@ int write_all (int socket, void *buf, size_t len)
   return 0;
 }
 
+int close_on_exec (int fd)
+{
+  return (fcntl(fd, F_SETFD, FD_CLOEXEC) != -1 ? 0 : -1);
+}
+
 static void quitterm_handler (int sig)
 {
   if (sig == SIGTERM)
@@ -256,7 +261,8 @@ static char const *create_client_socket_inet (struct server * const srv)
 
     if (setsockopt(client_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
                    sizeof(yes)) ||
-        connect(client_socket, walk->ai_addr, walk->ai_addrlen)) {
+        connect(client_socket, walk->ai_addr, walk->ai_addrlen) ||
+        close_on_exec(client_socket)) {
       close(client_socket);
     } else {
       srv->socket = client_socket;
@@ -298,7 +304,8 @@ static int create_listen_socket_inet (const char *ip, const char *port)
         !setsockopt(listen_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
                     sizeof(yes)) &&
         !bind(listen_socket, walk->ai_addr, walk->ai_addrlen) &&
-        !listen(listen_socket, 0))
+        !listen(listen_socket, 0) &&
+        !close_on_exec(listen_socket))
       break;
   }
 
@@ -552,7 +559,7 @@ static void *fft_worker (void *arg0)
   res = pthread_mutex_lock(&fft_mtx);
   if (res) {
     log_error("cannot lock fft mutex: %s", strerror(res));
-    goto ERROR;
+    goto FFT_WORKER_ERROR;
   }
 
   while (running) {
@@ -584,7 +591,7 @@ static void *fft_worker (void *arg0)
   if (res)
     log_error("cannot unlock fft mutex: %s", strerror(res));
 
-ERROR:
+FFT_WORKER_ERROR:
   kill(getpid(), SIGQUIT);
 
   return NULL;
@@ -639,7 +646,7 @@ static void *raw_recv (void *arg0)
   res = pthread_mutex_lock(&pcm_mtx);
   if (res) {
     log_error("cannot lock pcm mutex: %s", strerror(res));
-    goto ERROR;
+    goto RAW_RECV_ERROR;
   }
 
   while (running) {
@@ -701,7 +708,7 @@ static void *raw_recv (void *arg0)
   if (res)
     log_error("cannot unlock pcm mutex: %s", strerror(res));
 
-ERROR:
+RAW_RECV_ERROR:
   kill(getpid(), SIGQUIT);
 
   return NULL;
@@ -720,6 +727,12 @@ static int open_sound (struct soundcard * const soundcard)
   if (soundcard->handle < 0) {
     log_error("cannot open %s for capturing", soundcard->name);
     goto OSS_OPEN_SOUND_ERROR0;
+  }
+
+  if (close_on_exec(soundcard->handle)) {
+    log_error("cannot set close-on-exec on soundcard %s: %s",
+              soundcard->name, strerror(errno));
+    goto OSS_OPEN_SOUND_ERROR1;
   }
 
   if (ioctl(soundcard->handle, SNDCTL_DSP_SETFMT, &format) == -1) {
@@ -979,7 +992,7 @@ static void *pcm_worker (void *arg0)
   res = pthread_mutex_lock(&pcm_mtx);
   if (res) {
     log_error("cannot lock pcm mutex: %s", strerror(res));
-    goto ERROR;
+    goto PCM_WORKER_ERROR;
   }
 
   while (running) {
@@ -998,7 +1011,7 @@ static void *pcm_worker (void *arg0)
   if (res)
     log_error("cannot unlock pcm mutex: %s", strerror(res));
 
-ERROR:
+PCM_WORKER_ERROR:
   kill(getpid(), SIGQUIT);
 
   return NULL;
@@ -1572,7 +1585,7 @@ static void *client_worker (void *arg0)
 
   client_address(arg);
   if (count_client(1))
-    goto ERROR;
+    goto CLIENT_WORKER_ERROR;
 
   max_level = 131072.;
 
@@ -1582,7 +1595,7 @@ static void *client_worker (void *arg0)
 
   count_client(-1);
 
-ERROR:
+CLIENT_WORKER_ERROR:
   close(arg->socket);
 
   return NULL;
@@ -1607,28 +1620,35 @@ static int create_client_worker (int listen_socket)
 
   if (arg->socket < 0) {
     log_warn("accept(): %s", strerror(errno));
-    free(arg);
-    return 0;
+    goto CREATE_CLIENT_WORKER_ERROR0;
   }
 
   yes = 1;
   res = setsockopt(arg->socket, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
   if (res != 0) {
     log_warn("cannot set keepalive for client socket: %s", strerror(res));
-    close(arg->socket);
-    free(arg);
-    return 0;
+    goto CREATE_CLIENT_WORKER_ERROR1;
+  }
+
+  if (close_on_exec(arg->socket)) {
+    log_warn("cannot set close-on-exec for client socket: %s", strerror(res));
+    goto CREATE_CLIENT_WORKER_ERROR1;
   }
 
   res = pthread_create(&thread, NULL, &client_worker, arg);
   if (res != 0) {
     log_error("cannot create client worker thread: %s", strerror(res));
-    close(arg->socket);
-    free(arg);
-    return res;
+    goto CREATE_CLIENT_WORKER_ERROR1;
   }
 
   return res;
+
+CREATE_CLIENT_WORKER_ERROR1:
+  close(arg->socket);
+
+CREATE_CLIENT_WORKER_ERROR0:
+  free(arg);
+  return 0;
 }
 
 static int wait_for_client (int listen_socket)
