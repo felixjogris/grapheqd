@@ -9,34 +9,54 @@ export PATH=/usr/local/bin:$PATH
 #   sampling rate (4 bytes)
 #   ...pcm data...
 
-cmd=`dd bs=1 count=1 status=none 2>&1`
-[ -z "$cmd" ] && exit
-if [ "$cmd" != "r" ]; then
-  logger -i -p daemon.info -t "$0" "Unsupported command: $cmd"
-  exit
-fi
+MYNAME=`basename "$0"`
+SOUNDCARD="$1"
+STDERR="$2"
 
-mixersettings=`mixer -s 2>/dev/null`
-mixer =rec pcm2 >/dev/null 2>&1
+sendpcm () {
+  cmd=`dd bs=1 count=1 status=none`
+  [ -z "$cmd" ] && exit
+  if [ "$cmd" != "r" ]; then
+    logmsg "Unsupported command: $cmd"
+    exit
+  fi
 
-rate=""
-channels=""
-ac="2"
-probe=`ffprobe -hide_banner /dev/dsp0 2>&1`
-echo "$probe" | grep -q "44100 Hz" && rate='\104\254\0\0'
-echo "$probe" | grep -q "48000 Hz" && rate='\200\273\0\0'
-echo "$probe" | grep -q "mono"     && ac="1"
-if [ "$ac" = "1" ]; then
-  channels='\1\0'
-elif [ "$ac" = "2" ]; then
-  channels='\2\0'
-fi
-if [ -n "$rate" -a -n "$ac" -a -n "$channels" ]; then
-  printf "${channels}${rate}"
-  ffmpeg -nostdin -abort_on empty_output -loglevel quiet -i /dev/dsp0 \
-         -ac "$ac" -c:a pcm_s16le -f s16le - 2>/dev/null
+  mixersettings=`mixer -s`
+  mixer =rec pcm2 >/dev/null
+
+  rate=""
+  channels=""
+  ac="2"
+  probe=`ffprobe -hide_banner "$SOUNDCARD" 2>&1`
+  echo "$probe" | grep -q "44100 Hz" && rate='\104\254\0\0'
+  echo "$probe" | grep -q "48000 Hz" && rate='\200\273\0\0'
+  echo "$probe" | grep -q "mono"     && ac="1"
+  if [ "$ac" = "1" ]; then
+    channels='\1\0'
+  elif [ "$ac" = "2" ]; then
+    channels='\2\0'
+  fi
+  if [ -n "$rate" -a -n "$ac" -a -n "$channels" ]; then
+    printf "${channels}${rate}"
+    ffmpeg -nostdin -abort_on empty_output -loglevel quiet -i "$SOUNDCARD" \
+           -ac "$ac" -c:a pcm_s16le -f s16le -
+  else
+    logmsg "Unsupported rate and/or channels: $probe"
+  fi
+
+  mixer $mixersettings >/dev/null
+}
+
+if [ -n "$STDERR" -a "$STDERR" = "stderr" ]; then
+  logmsg () {
+    echo "${MYNAME}[$$]: $@" >&2
+  }
+
+  sendpcm
 else
-  logger -i -p daemon.info -t "$0" "Unsupported rate and/or channels: $probe"
-fi
+  logmsg () {
+    logger -i -p daemon.info -t "$MYNAME" "$@" >/dev/null
+  }
 
-mixer $mixersettings >/dev/null 2>&1
+  sendpcm 2>/dev/null
+fi

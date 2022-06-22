@@ -210,18 +210,14 @@ static void quitterm_handler (int sig)
 static void child_handler (int sig)
 {
   pid_t pid;
-  int status;
 
-  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-    if (WIFEXITED(status) && ((status = WEXITSTATUS(status))))
-      log_warn("pid %i exited with status %i", pid, status);
-    if (WIFSIGNALED(status))
-      log_warn("pid %i terminated by signal number %i, core dumped: %c",
-               pid, WTERMSIG(status), (WCOREDUMP(status) ? 'y' : 'n'));
+  while ((pid = waitpid(-1, &sig, WNOHANG)) > 0) {
+    if (WIFEXITED(sig) && ((sig = WEXITSTATUS(sig))))
+      log_warn("pid %i exited with status %i", pid, sig);
+    if (WIFSIGNALED(sig))
+      log_warn("pid %i terminated by signal number %i%s", pid,
+               WTERMSIG(sig), (WCOREDUMP(sig) ? ", core dumped" : ""));
   }
-
-  if (pid < 0)
-    log_error("waitpid(): %s", strerror(errno));
 }
 
 static void setup_signal (int sig, void (*handler)(int))
@@ -303,7 +299,7 @@ static char const *create_client_program (struct server * const srv)
     if (log_to_syslog)
       execve(srv->addr,
              (char*[]){ srv->addr, srv->port, NULL },
-             (char*[]){ NULL }) :
+             (char*[]){ NULL });
     else
       execve(srv->addr,
              (char*[]){ srv->addr, srv->port, "stderr", NULL },
@@ -382,11 +378,8 @@ static char const *create_client (struct server * const srv)
 static void close_client (struct server * const srv)
 {
   close(srv->rfd);
-
-  if (srv->is_program) {
+  if (srv->is_program)
     close(srv->wfd);
-//  wait(srv->pid);
-  }
 
   srv->rfd = -1;
   srv->wfd = -1;
@@ -772,7 +765,7 @@ static void *raw_recv (void *arg0)
       break;
     }
 
-    if ((err = create_client_socket_inet(srv))) {
+    if ((err = create_client(srv))) {
       log_error("cannot connect to %s:%s: %s", srv->addr, srv->port, err);
       continue;
     }
