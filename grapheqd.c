@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <sys/select.h>
 #include <syslog.h>
@@ -206,6 +207,23 @@ static void quitterm_handler (int sig)
   running = 0;
 }
 
+static void child_handler (int sig)
+{
+  pid_t pid;
+  int status;
+
+  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    if (WIFEXITED(status) && ((status = WEXITSTATUS(status))))
+      log_warn("pid %i exited with status %i", pid, status);
+    if (WIFSIGNALED(status))
+      log_warn("pid %i terminated by signal number %i, core dumped: %c",
+               pid, WTERMSIG(status), (WCOREDUMP(status) ? 'y' : 'n'));
+  }
+
+  if (pid < 0)
+    log_error("waitpid(): %s", strerror(errno));
+}
+
 static void setup_signal (int sig, void (*handler)(int))
 {
   struct sigaction sa;
@@ -229,11 +247,15 @@ static void setup_signals ()
   if (sigdelset(&sigset, SIGQUIT) != 0)
     err(1, "sigdelset(SIGQUIT)");
 
+  if (sigdelset(&sigset, SIGCHLD) != 0)
+    err(1, "sigdelset(SIGCHLD)");
+
   if (pthread_sigmask(SIG_SETMASK, &sigset, NULL) != 0)
     err(1, "pthread_sigmask()");
 
   setup_signal(SIGTERM, quitterm_handler);
   setup_signal(SIGQUIT, quitterm_handler);
+  setup_signal(SIGCHLD, child_handler);
 }
 
 static struct passwd *get_user (const char *username)
@@ -265,8 +287,9 @@ static char const *create_client_program (struct server * const srv)
   pid = fork();
   if (pid < 0) {
     err = strerror(errno);
-    goto CREATE_CLIENT_PROGRAM_ERROR1;
+    goto CREATE_CLIENT_PROGRAM_ERROR2;
   }
+
   if (pid == 0) {
     close(child2parent[0]);
     close(parent2child[1]);
