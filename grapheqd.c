@@ -236,46 +236,40 @@ static struct passwd *get_user (const char *username)
   return pw;
 }
 
-static int create_client_socket_inet (const char *host_or_ip,
-                                      const char *service_or_port,
-                                      char const **err)
+static char const *create_client_socket_inet (struct server * const srv)
 {
-  int client_socket = -1, yes = 1, res;
+  int client_socket, yes = 1, res;
   struct addrinfo hints, *result, *walk;
+  char *err = NULL;
 
   memset(&hints, 0, sizeof(hints));
   hints.ai_flags = 0;
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
 
-  if ((res = getaddrinfo(host_or_ip, service_or_port, &hints, &result)) != 0) {
-    *err = gai_strerror(res);
-    return -1;
-  }
+  if ((res = getaddrinfo(srv->addr, srv->port, &hints, &result)) != 0)
+    return gai_strerror(res);
 
   for (walk = result; walk; walk = walk->ai_next) {
-    if (client_socket >= 0)
-      close(client_socket);
-
-    client_socket = socket(walk->ai_family, walk->ai_socktype, 0);
-    if (client_socket < 0)
+    if ((client_socket = socket(walk->ai_family, walk->ai_socktype, 0)) < 0)
       continue;
 
-    if (!setsockopt(client_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
-                    sizeof(yes)) &&
-        !connect(client_socket, walk->ai_addr, walk->ai_addrlen))
+    if (setsockopt(client_socket, SOL_SOCKET, SO_KEEPALIVE, &yes,
+                   sizeof(yes)) ||
+        connect(client_socket, walk->ai_addr, walk->ai_addrlen)) {
+      close(client_socket);
+    } else {
+      srv->socket = client_socket;
       break;
+    }
   }
 
   if (!walk)
-    *err = strerror(errno);
+    err = strerror(errno);
 
   freeaddrinfo(result);
 
-  if (!walk)
-    return -1;
-
-  return client_socket;
+  return err;
 }
 
 static int create_listen_socket_inet (const char *ip, const char *port)
@@ -656,8 +650,7 @@ static void *raw_recv (void *arg0)
       break;
     }
 
-    srv->socket = create_client_socket_inet(srv->addr, srv->port, &err);
-    if (srv->socket < 0) {
+    if ((err = create_client_socket_inet(srv))) {
       log_error("cannot connect to %s:%s: %s", srv->addr, srv->port, err);
       continue;
     }
@@ -1779,8 +1772,7 @@ int main (int argc, char **argv)
     errx(1, "cannot initialize FFT state");
 
   if (srv.addr) {
-    srv.socket = create_client_socket_inet(srv.addr, srv.port, &err);
-    if (srv.socket < 0)
+    if ((err = create_client_socket_inet(&srv)))
       errx(1, "cannot connect to %s:%s: %s", srv.addr, srv.port, err);
     close(srv.socket);
     create_helper_worker(&raw_recv, &srv, "recv");
