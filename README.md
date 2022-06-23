@@ -38,7 +38,7 @@ grapheqd -h
                     port);
                     cannot be used in conjunction with either option -e or -s
   -d                run in foreground, and log to stdout/stderr, do not detach
-                    detach from terminal, do not log to syslog
+                    from terminal, do not log to syslog
   -e <program>      read PCM data from this program's standard output; the
                     name of the soundcard is passed as first commandline
                     parameter to <program>; if the second commandline
@@ -49,7 +49,7 @@ grapheqd -h
                     cannot be used in conjunction with either option -c or -r
   -l <port>         listen on this port; default: 8083
   -p <pid file>     daemonize and save pid to this file; no default, pid gets
-                    not written to any file
+                    not written to any file unless <pid file> is given
   -r <port>         connect to a remote grapheqd on this port; requires
                     parameter -c;
                     cannot be used in conjunction with either option -e or -s
