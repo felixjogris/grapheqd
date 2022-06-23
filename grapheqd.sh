@@ -32,7 +32,7 @@ if [ -n "$2" ]; then
     eval grapheqd_raddress="\${grapheqd_${profile}_raddress:-${grapheqd_raddress}}"
     eval grapheqd_rport="\${grapheqd_${profile}_rport:-${grapheqd_rport}}"
     eval grapheqd_soundcard="\${grapheqd_${profile}_soundcard:-${grapheqd_soundcard}}"
-    eval grapheqd_program="\${grapheqd_${profile}_program:-${grapheqd_program}}"
+    eval grapheqd_eprogram="\${grapheqd_${profile}_eprogram:-${grapheqd_eprogram}}"
   else
     echo "$0: extra argument ignored"
   fi
@@ -54,6 +54,7 @@ elif [ -n "${grapheqd_profiles}" ]; then
       success="${profile} ${success:-}"
     fi
   done
+  exit 0
 fi
 
 pidfile="$grapheqd_pidfile"
@@ -73,6 +74,9 @@ if [ -n "$grapheqd_rport" ]; then
 fi
 if [ -n "$grapheqd_soundcard" ]; then
   command_args="$command_args -s '$grapheqd_soundcard'"
+fi
+if [ -n "$grapheqd_eprogram" ]; then
+  command_args="$command_args -e '$grapheqd_eprogram'"
 fi
 
 remove_stale_pidfile() {
