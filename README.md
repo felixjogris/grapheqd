@@ -24,26 +24,34 @@ If your terminal does not support colors and/or escape sequences, press *m* foll
 
 ```
 $ ./grapheqd -h
-graphedq version 3
+grapheqd version 5
 PCM driver: OSS
 
 Usage:
-grapheqd [-a <address>] [-c <address>] [-d] [-l <port>] [-p <pid file>]
-         [-r <port>] [-s <soundcard>] [-u <user>]
+grapheqd [-a <address>] [-c <address>] [-d] [-e <program>] [-l <port>]
+         [-p <pid file>] [-r <port>] [-s <soundcard>] [-u <user>]
 grapheqd -h
 
   -a <address>      listen on this address; default: 0.0.0.0
-  -c <address>      connect to another grapheqd running at this address, do
-                    not use any actual audio hardware; cannot be used in
-                    conjunction with option -s
+  -c <address>      connect to another grapheqd running at this address on
+                    port 8083 by default (use -r to connect to a different
+                    port)
+                    cannot be used in conjunction with either option -e or -s
   -d                run in foreground, and log to stdout/stderr, do not detach
                     detach from terminal, do not log to syslog
+  -e <program>      read PCM data from this program's standard output; the
+                    name of the soundcard is passed as first commandline
+                    parameter to <program>
+                    cannot be used in conjunction with either option -c or -r
   -l <port>         listen on this port; default: 8083
   -p <pid file>     daemonize and save pid to this file; no default, pid gets
                     not written to any file
-  -r <port>         connect to a remote grapheqd on this port; default: 8083
+  -r <port>         connect to a remote grapheqd on this port; requires
+                    parameter -c;
+                    cannot be used in conjunction with either option -e or -s
   -s <soundcard>    read PCM from this soundcard; default: /dev/dsp0; cannot
-                    be used in conjunction with either option -c or -r
+                    be used in conjunction with either option -c or -r; a
+                    program given via parameter -e takes precedence
   -u <user>         switch to this user; no default, run as invoking user
   -h                show this help ;-)
 
@@ -58,6 +66,8 @@ grapheqd -h
   By default, the grapheqd build process expects a copy of KISS FFT in the directory ../kissfft. You can specify another directory by passing *KISSFFT=/some/other/directory* to *make*. To fetch a copy of KISS FFT, issue this from within the grapheqd directory:
 
   `git clone https://github.com/mborgerding/kissfft.git ../kissfft`
+
+  Or simply call `make`.
 
 * On Linux: ALSA library and headers to access your audio device and to read PCM data
 
@@ -98,6 +108,20 @@ grapheqd -h
 4. Optionally, if you want systemd integration, call *make* with *USE_SYSTEMD=1*
 
 5. You now have *grapheqd* in the current directory. Either call it directly, copy it somewhere, or run `sudo make install`, which will place it to */usr/local/sbin*. Then either add it to your RC init or systemd configuration, or use the provided scripts `grapheqd.service`, `grapheqd.openrc`, or `grapheqd.sh`, which `make install` has copied to `/lib/systemd/system`, `/etc/init.d`, or `/usr/local/etc/rc.d`, respectively.
+
+6. Starting with version 5, the RC script `/usr/local/etc/rc.d/grapheqd` on FreeBSD supports multiple profiles, e.g. one might have this in `/etc/rc.conf`:
+
+   ```
+   grapheqd_enable="YES"
+   grapheqd_profiles="scard remote"
+   grapheqd_scard_soundcard="/dev/dsp1"
+   grapheqd_scard_username="audiouser"
+   grapheqd_remote_port="8084"
+   grapheqd_remote_raddress="somehost"
+   grapheqd_remote_rport="8083"
+   ```
+
+   You can start each instance via `service grapheqd start scard` and `service grapheqd start remote`, respectively. If you omit the profile name, the RC script operates on every configured and enabled instance, e.g. `service grapheqd stop`.
 
 ### OpenWRT
 
