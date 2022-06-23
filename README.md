@@ -113,16 +113,21 @@ Create a directory *package/grapheqd* inside your copy of the OpenWRT source tre
 
   `grapheqd -c <remote host>`
 
-* Starting with version 5, grapheqd can start an external program via commandline option `-e` and read PCM data from the stdout of that program. See ffmpeg2grapheqd.sh for further details.
+* Starting with version 5, grapheqd can start an external program via commandline option `-e` and read PCM data from the standard output of that program. See ffmpeg2grapheqd.sh for further details.
 
 * You can also add place ffmpeg2grapheqd.sh (or any similiar program) on a remote host and make it accessible via inetd, e.g. on FreeBSD:
 
-  1. Place ffmpeg2grapheqd.sh to /usr/local/libexec
+  1. Place ffmpeg2grapheqd.sh to /usr/local/libexec, which `make install` does by default.
 
-  2. Add this to /etc/inetd.conf and service inetd restart:
+  2. Add this to /etc/inetd.conf:
+
      `mmcc	stream	tcp	nowait	root	/usr/local/libexec/ffmpeg2grapheqd.sh	ffmpeg2grapheqd.sh`
 
-  3. Start grapheqd with `-c <remote host> -r mmcc`
+  3. (Re-)start inetd:
+
+     `service inetd restart`
+
+  4. Start grapheqd with `-c <remote host> -r mmcc`
 
   If grapheqd runs as user who is not allowed to access local devices or is otherwise prohibited from running the external program, you can also connect to a local instance of inetd if it has been configured as shown in aboves inetd.conf snippet. Simply connect to localhost:
 
