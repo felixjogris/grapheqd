@@ -105,6 +105,29 @@ Create a directory *package/grapheqd* inside your copy of the OpenWRT source tre
 
 [openwrt/Makefile](openwrt/Makefile) is a copy of that Makefile.
 
+## Audio sources
+
+* By default, grapheqd reads PCM data from a soundcard found on the local system. On Linux, ALSA device *hw:0* is used if not overridden by commandline option `-s`. On FreeBSD, the default soundcard is */dev/dsp0*.
+
+* You can also connect to another instance of grapheqd running on a remote host:
+
+  `grapheqd -c <remote host>`
+
+* Starting with version 5, grapheqd can start an external program via commandline option `-e` and read PCM data from the stdout of that program. See ffmpeg2grapheqd.sh for further details.
+
+* You can also add place ffmpeg2grapheqd.sh (or any similiar program) on a remote host and make it accessible via inetd, e.g. on FreeBSD:
+
+  1. Place ffmpeg2grapheqd.sh to /usr/local/libexec
+
+  2. Add this to /etc/inetd.conf and service inetd restart:
+     `mmcc	stream	tcp	nowait	root	/usr/local/libexec/ffmpeg2grapheqd.sh	ffmpeg2grapheqd.sh`
+
+  3. Start grapheqd with `-c <remote host> -r mmcc`
+
+  If grapheqd runs as user who is not allowed to access local devices or is otherwise prohibited from running the external program, you can also connect to a local instance of inetd if it has been configured as shown in aboves inetd.conf snippet. Simply connect to localhost:
+
+  `grapheqd -c localhost -r mmcc`
+
 ## Under the hood
 
 Per channel, grapheqd passes 4096 16 bit audio samples (mono or stereo) at a time to FFT, and pushes calculated linear frequency data to all connected clients, thus resulting in roughly 11 or 12 updates per second if your hardware supports sampling at 44100 or 48000 Hz, respectively. The web interface adjusts the labels under each band (vertical bar) to match its frequency range. If only mono audio is available, then the FFT is called just once per loop, while the output data is duplicated. If no client is connected, then no PCM data is read and FFT does not burn CPU cycles unnecessarily.
