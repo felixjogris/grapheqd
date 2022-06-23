@@ -35,13 +35,17 @@ grapheqd -h
   -a <address>      listen on this address; default: 0.0.0.0
   -c <address>      connect to another grapheqd running at this address on
                     port 8083 by default (use -r to connect to a different
-                    port)
+                    port);
                     cannot be used in conjunction with either option -e or -s
   -d                run in foreground, and log to stdout/stderr, do not detach
                     detach from terminal, do not log to syslog
   -e <program>      read PCM data from this program's standard output; the
                     name of the soundcard is passed as first commandline
-                    parameter to <program>
+                    parameter to <program>; if the second commandline
+                    parameter is present and has a value of "stderr", i.e.
+                    if grapheqd has been started with -d, then <program> can
+                    write to standard error safely; otherwise, error logging
+                    must be done via syslog, e.g. by calling logger;
                     cannot be used in conjunction with either option -c or -r
   -l <port>         listen on this port; default: 8083
   -p <pid file>     daemonize and save pid to this file; no default, pid gets
