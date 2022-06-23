@@ -115,7 +115,7 @@ Create a directory *package/grapheqd* inside your copy of the OpenWRT source tre
 
 * Starting with version 5, grapheqd can start an external program via commandline option `-e` and read PCM data from the standard output of that program. See ffmpeg2grapheqd.sh for further details.
 
-* You can also add place [ffmpeg2grapheqd.sh] (or any similiar program) on a remote host and make it accessible via inetd, e.g. on FreeBSD:
+* You can also place [ffmpeg2grapheqd.sh](ffmpeg2grapheqd.sh) (or any similiar program) on a remote host and make it accessible via inetd, e.g. on FreeBSD:
 
   1. Place ffmpeg2grapheqd.sh to /usr/local/libexec, which `make install` does by default.
 
