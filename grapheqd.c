@@ -36,7 +36,7 @@
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "5"
+#define GRAPHEQD_VERSION "6"
 
 #define MAX_CHANNELS 2   /* stereo */
 #define SAMPLING_WIDTH 2 /* 16 bit signed LE per channel per sample */
@@ -948,7 +948,7 @@ static int open_sound (struct soundcard * const soundcard)
   }
 
   err = snd_pcm_hw_params_any(soundcard->handle, params);
-  if (err)
+  if (err) {
     log_error("snd_pcm_hw_params_any(): %s", snd_strerror(err));
     goto ALSA_OPEN_SOUND_ERROR2;
   }
