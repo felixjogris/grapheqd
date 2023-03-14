@@ -9,16 +9,12 @@ start_service () {
   config_load "${CONFIGURATION}"
 
   local address
-  local port
   local raddress
-  local rport
   local soundcard
   local username
 
   config_get address   grapheqd address
-  config_get port      grapheqd port
   config_get raddress  grapheqd raddress
-  config_get rport     grapheqd rport
   config_get soundcard grapheqd soundcard
   config_get username  grapheqd username
 
@@ -28,10 +24,8 @@ start_service () {
   procd_set_param command /usr/sbin/grapheqd -d
   procd_append_param command -u "$username"
 
-  [ -n "$address" ]   && procd_append_param command -a "$address"
-  [ -n "$port" ]      && procd_append_param command -l "$port"
-  [ -n "$raddress" ]  && procd_append_param command -c "$raddress"
-  [ -n "$rport" ]     && procd_append_param command -r "$rport"
+  [ -n "$address" ]   && procd_append_param command -l "$address"
+  [ -n "$raddress" ]  && procd_append_param command -r "$raddress"
   [ -n "$soundcard" ] && procd_append_param command -s "$soundcard"
 
   procd_set_param file /etc/config/grapheqd

@@ -27,12 +27,10 @@ if [ -n "$2" ]; then
     eval grapheqd_enable="\${grapheqd_${profile}_enable:-${grapheqd_enable}}"
     eval grapheqd_pidfile="\${grapheqd_${profile}_pidfile:-/var/run/${name}.${profile}.pid}"
     eval grapheqd_username="\${grapheqd_${profile}_username:-${grapheqd_username}}"
-    eval grapheqd_address="\${grapheqd_${profile}_address:-${grapheqd_address}}"
-    eval grapheqd_port="\${grapheqd_${profile}_port:-${grapheqd_port}}"
-    eval grapheqd_raddress="\${grapheqd_${profile}_raddress:-${grapheqd_raddress}}"
-    eval grapheqd_rport="\${grapheqd_${profile}_rport:-${grapheqd_rport}}"
-    eval grapheqd_soundcard="\${grapheqd_${profile}_soundcard:-${grapheqd_soundcard}}"
     eval grapheqd_eprogram="\${grapheqd_${profile}_eprogram:-${grapheqd_eprogram}}"
+    eval grapheqd_address="\${grapheqd_${profile}_address:-${grapheqd_address}}"
+    eval grapheqd_raddress="\${grapheqd_${profile}_raddress:-${grapheqd_raddress}}"
+    eval grapheqd_soundcard="\${grapheqd_${profile}_soundcard:-${grapheqd_soundcard}}"
   else
     echo "$0: extra argument ignored"
   fi
@@ -60,23 +58,17 @@ fi
 pidfile="$grapheqd_pidfile"
 command_args="-p '$pidfile' -u '$grapheqd_username'"
 
-if [ -n "$grapheqd_address" ]; then
-  command_args="$command_args -a '$grapheqd_address'"
+if [ -n "$grapheqd_eprogram" ]; then
+  command_args="$command_args -e '$grapheqd_eprogram'"
 fi
-if [ -n "$grapheqd_port" ]; then
-  command_args="$command_args -l '$grapheqd_port'"
+if [ -n "$grapheqd_address" ]; then
+  command_args="$command_args -l '$grapheqd_address'"
 fi
 if [ -n "$grapheqd_raddress" ]; then
-  command_args="$command_args -c '$grapheqd_raddress'"
-fi
-if [ -n "$grapheqd_rport" ]; then
-  command_args="$command_args -r '$grapheqd_rport'"
+  command_args="$command_args -r '$grapheqd_raddress'"
 fi
 if [ -n "$grapheqd_soundcard" ]; then
   command_args="$command_args -s '$grapheqd_soundcard'"
-fi
-if [ -n "$grapheqd_eprogram" ]; then
-  command_args="$command_args -e '$grapheqd_eprogram'"
 fi
 
 remove_stale_pidfile() {

@@ -8,23 +8,17 @@ command="${RC_PREFIX%/}/usr/local/sbin/grapheqd}"
 pidfile="$GRAPHEQD_PIDFILE"
 command_args="-p '$pidfile' -u '$GRAPHEQD_USERNAME'"
 
-if [ -n "$GRAPHEQD_ADDRESS" ]; then
-  command_args="$command_args -a '$GRAPHEQD_ADDRESS'"
+if [ -n "$GRAPHEQD_PROGRAM" ]; then
+  command_args="$command_args -e '$GRAPHEQD_PROGRAM'"
 fi
-if [ -n "$GRAPHEQD_PORT" ]; then
-  command_args="$command_args -l '$GRAPHEQD_PORT'"
+if [ -n "$GRAPHEQD_ADDRESS" ]; then
+  command_args="$command_args -l '$GRAPHEQD_ADDRESS'"
 fi
 if [ -n "$GRAPHEQD_RADDRESS" ]; then
-  command_args="$command_args -c '$GRAPHEQD_RADDRESS'"
-fi
-if [ -n "$GRAPHEQD_RPORT" ]; then
-  command_args="$command_args -r '$GRAPHEQD_RPORT'"
+  command_args="$command_args -r '$GRAPHEQD_RADDRESS'"
 fi
 if [ -n "$GRAPHEQD_SOUNDCARD" ]; then
   command_args="$command_args -s '$GRAPHEQD_SOUNDCARD'"
-fi
-if [ -n "$GRAPHEQD_PROGRAM" ]; then
-  command_args="$command_args -e '$GRAPHEQD_PROGRAM'"
 fi
 
 depend() {

@@ -36,7 +36,7 @@
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "6"
+#define GRAPHEQD_VERSION "7"
 
 #define MAX_CHANNELS 2   /* stereo */
 #define SAMPLING_WIDTH 2 /* 16 bit signed LE per channel per sample */
@@ -44,6 +44,10 @@
                             displayed */
 #define DISPLAY_BARS 25  /* 25 vertical segments per band */
 #define FFT_SIZE 4096    /* must be power of 2 */
+
+#define DEFAULT_ADDRESS      "0.0.0.0"
+#define DEFAULT_PORT         "8083"
+#define MAX_LISTEN_ADDRESSES 16
 
 #define log_error(fmt, params ...) do { \
   if (log_to_syslog) \
@@ -497,6 +501,36 @@ static void client_address (struct client_worker_arg *arg)
                "<unknown address family %u>", arg->addr.sa_family);
       break;
   }
+}
+
+static char *parse_address (char *ip46_port, char **addr, char **port,
+                            char *default_port)
+{
+  char *closing_bracket;
+
+  if (*ip46_port == '[') {
+    *addr = ip46_port + 1;
+    closing_bracket = strchr(ip46_port, ']');
+    if (!closing_bracket)
+      return "missing ']' in address";
+
+    if (*(closing_bracket + 1) && (*(closing_bracket + 1) != ':'))
+      return "expected ':' after ']'";
+
+    *closing_bracket++ = '\0';
+  } else {
+    *addr = ip46_port;
+    closing_bracket = strchr(ip46_port, ':');
+  }
+
+  if (!closing_bracket || !*closing_bracket)
+    *port  = default_port;
+  else {
+    *port = closing_bracket + 1;
+    *closing_bracket = '\0';
+  }
+
+  return NULL;
 }
 
 void thread_setname (const char *name)
@@ -1753,30 +1787,38 @@ CREATE_CLIENT_WORKER_ERROR0:
   return 0;
 }
 
-static int wait_for_client (int listen_socket)
+static int wait_for_client (int *listen_sockets, int num_lsocks)
 {
-  int res;
+  int i, ready, res, max_sock = 0;
   fd_set rfds;
   struct timeval timeout;
 
   FD_ZERO(&rfds);
-  FD_SET(listen_socket, &rfds);
+  for (i = 0; i < num_lsocks; i++) {
+    FD_SET(listen_sockets[i], &rfds);
+    if (listen_sockets[i] > max_sock)
+      max_sock = listen_sockets[i];
+  }
   timeout.tv_sec = 2;
   timeout.tv_usec = 0;
 
-  res = select(listen_socket + 1, &rfds, NULL, NULL, &timeout);
+  if ((ready = select(max_sock + 1, &rfds, NULL, NULL, &timeout)) < 0) {
+    if (errno == EINTR)
+      return 0;
 
-  if (res > 0) {
-    res = create_client_worker(listen_socket);
-  } else if (res < 0) {
-    if (errno == EINTR) {
-      res = 0;
-    } else {
-      log_error("select(): %s", strerror(errno));
+    log_error("select(): %s", strerror(errno));
+    return ready;
+  }
+
+  for (i = 0; ready && (i < num_lsocks); i++) {
+    if (FD_ISSET(listen_sockets[i], &rfds)) {
+      ready--;
+      if ((res = create_client_worker(listen_sockets[i])))
+        return res;
     }
   }
 
-  return res;
+  return 0;
 }
 
 static void create_helper_worker (void *(*start_routine)(void*), void *arg,
@@ -1813,91 +1855,100 @@ static void show_help ()
 "\n"
 "\n"
 "Usage:\n"
-"grapheqd [-a <address>] [-c <address>] [-d] [-e <program>] [-l <port>]\n"
-"         [-p <pid file>] [-r <port>] [-s <soundcard>] [-u <user>]\n"
+"grapheqd [-d] [-e <program>] [-l <address[:port]>] [-p <pidfile>]\n"
+"         [-r <address[:port]>] [-s <soundcard>] [-u <user>]\n"
 "grapheqd -h\n"
 "\n"
-"  -a <address>      listen on this address; default: 0.0.0.0\n"
-"  -c <address>      connect to another grapheqd running at this address on\n"
-"                    port 8083 by default (use -r to connect to a different\n"
-"                    port);\n"
-"                    cannot be used in conjunction with either option -e or "
-                                                                        "-s\n"
-"  -d                run in foreground, and log to stdout/stderr, do not "
-                                                                    "detach\n"
-"                    from terminal, do not log to syslog\n"
-"  -e <program>      read PCM data from this program's standard output; the\n"
-"                    name of the soundcard is passed as first commandline\n"
-"                    parameter to <program>; if the second commandline\n"
-"                    parameter is present and has a value of \"stderr\", "
-                                                                      "i.e.\n"
-"                    if grapheqd has been started with -d, then <program> "
-                                                                      "can\n"
-"                    write to standard error safely; otherwise, error "
-                                                                   "logging\n"
-"                    must be done via syslog, e.g. by calling logger;\n"
-"                    cannot be used in conjunction with either option -c or "
-                                                                        "-r\n"
-"  -l <port>         listen on this port; default: 8083\n"
-"  -p <pid file>     daemonize and save pid to this file; no default, pid "
-                                                                      "gets\n"
-"                    not written to any file unless <pid file> is given\n"
-"  -r <port>         connect to a remote grapheqd on this port; requires\n"
-"                    parameter -c;\n"
-"                    cannot be used in conjunction with either option -e or "
-                                                                        "-s\n"
-"  -s <soundcard>    read PCM from this soundcard; default: "
+"  -d                     run in foreground, and log to stdout/stderr, do "
+                                                                       "not\n"
+"                         detach from terminal, do not log to syslog\n"
+"  -e <program>           read PCM data from this program's standard "
+                                                                   "output;\n"
+"                         the name of the soundcard is passed as first\n"
+"                         commandline parameter to <program>;\n"
+"                         if the second commandline parameter is present "
+                                                                       "and\n"
+"                         has a value of \"stderr\", i.e. if grapheqd has "
+                                                                      "been\n"
+"                         started with -d, then <program> can write to\n"
+"                         standard error safely;\n"
+"                         otherwise, error logging must be done via syslog,\n"
+"                         e.g. by calling logger;\n"
+"                         cannot be used in conjunction with either option "
+                                                                        "-c\n"
+"                         or -r\n"
+"  -l <address[:port]>    listen on this address and port; a maximum of "
+                                                STR(MAX_LISTEN_ADDRESSES) "\n"
+"                         addresses may be specified; port defaults to "
+                                                            DEFAULT_PORT ";\n"
+"                         default: " DEFAULT_ADDRESS ":" DEFAULT_PORT "\n"
+"  -p <pidfile>           daemonize and save pid to this file; no default, "
+                                                                       "pid\n"
+"                         gets not written to any file unless <pidfile> is "
+                                                                     "given\n"
+"  -r <address[:port]>    connect to another grapheqd running at this "
+                                                               "address and\n"
+"                         port; <port> defaults to " DEFAULT_PORT
+                                                       "; cannot be used in\n"
+"                         conjunction with either option -e or -s\n"
+"  -s <soundcard>         read PCM from this soundcard; default: "
 DEFAULT_SOUNDCARD
-"; cannot\n"
-"                    be used in conjunction with either option -c or -r; a\n"
-"                    program given via parameter -e takes precedence\n" 
-"  -u <user>         switch to this user; no default, run as invoking user\n"
-"  -h                show this help ;-)\n"
+";\n"
+"                         cannot be used in conjunction with option -r; a\n"
+"                         program given via parameter -e takes precedence\n" 
+"  -u <user>              switch to this user; no default, run as invoking "
+                                                                      "user\n"
+"  -h                     show this help ;-)\n"
 );
 }
 
 int main (int argc, char **argv)
 {
-  int res, listen_socket, foreground = 0;
-  char *address = "0.0.0.0", *port = "8083", *pidfile = NULL;
+  int res, listen_sockets[MAX_LISTEN_ADDRESSES], num_lsocks = 0,
+      foreground = 0;
+  char *address, *port, *pidfile = NULL;
   struct soundcard soundcard = { 0 };
   const char *err;
   struct server srv = { -1, 0, 0, -1, -1, -1 };
   struct passwd *user = NULL;
   kiss_fft_cfg fft_cfg;
 
-  while ((res = getopt(argc, argv, "a:c:de:hl:p:r:s:u:")) != -1) {
+  while ((res = getopt(argc, argv, "de:hl:p:r:s:u:")) != -1) {
     switch (res) {
-      case 'a': address = optarg; break;
-      case 'c':
-        if (srv.is_program > 0)
-          errx(1, "options -c and -e are mutually exclusive");
-        if (soundcard.name)
-          errx(1, "options -c and -s are mutually exclusive");
-        srv.addr = optarg;
-        srv.is_program = 0;
-        break;
       case 'd': foreground = 1; break;
       case 'e':
         if (!srv.is_program)
-          errx(1, "options -e and -c/-r and are mutually exclusive");
+          errx(1, "options -e and -r and are mutually exclusive");
         srv.addr = optarg;
         srv.is_program = 1;
         break;
       case 'h': show_help(); return 0;
-      case 'l': port = optarg; break;
+      case 'l':
+        if (num_lsocks >= MAX_LISTEN_ADDRESSES)
+          errx(1, "too many addresses to listen on given, maximum is %i",
+                  MAX_LISTEN_ADDRESSES);
+
+        err = parse_address(optarg, &address, &port, DEFAULT_PORT);
+        if (err)
+          errx(1, "%s: %s", optarg, err);
+
+        listen_sockets[num_lsocks] = create_listen_socket_inet(address, port);
+        num_lsocks++;
+        break;
       case 'p': pidfile = optarg; break;
       case 'r':
         if (srv.is_program > 0)
           errx(1, "options -r and -e are mutually exclusive");
         if (soundcard.name)
           errx(1, "options -r and -s are mutually exclusive");
-        srv.port = optarg;
+        err = parse_address(optarg, &srv.addr, &srv.port, DEFAULT_PORT);
+        if (err)
+          errx(1, "%s: %s", optarg, err);
         srv.is_program = 0;
         break;
       case 's':
         if (!srv.is_program)
-          errx(1, "options -s and -c/-r are mutually exclusive");
+          errx(1, "options -s and -r are mutually exclusive");
         soundcard.name = optarg;
         break;
       case 'u': user = get_user(optarg); break;
@@ -1905,19 +1956,16 @@ int main (int argc, char **argv)
     }
   }
 
+  if (!num_lsocks)
+    listen_sockets[num_lsocks++] = create_listen_socket_inet(DEFAULT_ADDRESS,
+                                                             DEFAULT_PORT);
+
   if (!soundcard.name)
     soundcard.name = DEFAULT_SOUNDCARD;
 
-  if (srv.is_program == 1) {
+  if (srv.is_program == 1)
     srv.port = soundcard.name;
-  } else if (!srv.is_program) {
-    if (!srv.addr)
-      errx(1, "option -r requires -c");
-    if (!srv.port)
-      srv.port = "8083";
-  }
 
-  listen_socket = create_listen_socket_inet(address, port);
   if (srv.is_program)
     if (open_sound(&soundcard))
       return -1;
@@ -1960,7 +2008,7 @@ int main (int argc, char **argv)
 #endif
 
   while (running) {
-    res = wait_for_client(listen_socket);
+    res = wait_for_client(listen_sockets, num_lsocks);
     if (res < 0)
       running = 0;
   }
@@ -1970,7 +2018,8 @@ int main (int argc, char **argv)
   else
     close_sound(&soundcard);
 
-  close(listen_socket);
+  while (num_lsocks)
+    close(listen_sockets[--num_lsocks]);
 
   if (pidfile)
     unlink(pidfile); /* may fail, e.g. due to changed user privs */
