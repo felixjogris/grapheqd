@@ -31,6 +31,7 @@ if [ -n "$2" ]; then
     eval grapheqd_address="\${grapheqd_${profile}_address:-${grapheqd_address}}"
     eval grapheqd_raddress="\${grapheqd_${profile}_raddress:-${grapheqd_raddress}}"
     eval grapheqd_soundcard="\${grapheqd_${profile}_soundcard:-${grapheqd_soundcard}}"
+    eval grapheqd_args="\${grapheqd_${profile}_args:-${grapheqd_args}}"
   else
     echo "$0: extra argument ignored"
   fi
@@ -69,6 +70,9 @@ if [ -n "$grapheqd_raddress" ]; then
 fi
 if [ -n "$grapheqd_soundcard" ]; then
   command_args="$command_args -s '$grapheqd_soundcard'"
+fi
+if [ -n "$grapheqd_args" ]; then
+  command_args="$command_args $grapheqd_args"
 fi
 
 remove_stale_pidfile() {

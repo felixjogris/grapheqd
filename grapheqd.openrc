@@ -20,6 +20,9 @@ fi
 if [ -n "$GRAPHEQD_SOUNDCARD" ]; then
   command_args="$command_args -s '$GRAPHEQD_SOUNDCARD'"
 fi
+if [ -n "$GRAPHEQD_ARGS" ]; then
+  command_args="$command_args $GRAPHEQD_ARGS"
+fi
 
 depend() {
 	need localmount
