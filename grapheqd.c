@@ -78,7 +78,12 @@
 
 /* passed to a client worker thread after accept() */
 struct client_worker_arg {
-  struct sockaddr addr;
+//  struct sockaddr addr;
+  union {
+    struct sockaddr saddr;
+    struct sockaddr_in sin;
+    struct sockaddr_in6 sin6;
+  } addr;
   socklen_t addr_len;
   char clientname[INET6_ADDRSTRLEN + 8];
   int socket;
@@ -482,15 +487,15 @@ static void client_address (struct client_worker_arg *arg)
   struct sockaddr_in *sin;
   struct sockaddr_in6 *sin6;
 
-  switch (arg->addr.sa_family) {
+  switch (arg->addr.sin.sin_family) {
     case AF_INET:
-      sin = (struct sockaddr_in*) &arg->addr;
+      sin = &arg->addr.sin;
       snprintf(arg->clientname, sizeof(arg->clientname), "%s:%u",
                inet_ntop(sin->sin_family, &sin->sin_addr, addr, sizeof(addr)),
                htons(sin->sin_port));
       break;
     case AF_INET6:
-      sin6 = (struct sockaddr_in6*) &arg->addr;
+      sin6 = &arg->addr.sin6;
       snprintf(arg->clientname, sizeof(arg->clientname), "[%s]:%u",
                inet_ntop(sin6->sin6_family, &sin6->sin6_addr, addr,
                          sizeof(addr)),
@@ -498,7 +503,7 @@ static void client_address (struct client_worker_arg *arg)
       break;
     default:
       snprintf(arg->clientname, sizeof(arg->clientname),
-               "<unknown address family %u>", arg->addr.sa_family);
+               "<unknown address family %u>", arg->addr.sin.sin_family);
       break;
   }
 }
@@ -1751,7 +1756,7 @@ static int create_client_worker (int listen_socket)
 
   do {
     arg->addr_len = sizeof(arg->addr);
-    arg->socket = accept(listen_socket, &arg->addr, &arg->addr_len);
+    arg->socket = accept(listen_socket, &arg->addr.saddr, &arg->addr_len);
   } while ((arg->socket < 0) && (errno == EINTR));
 
   if (arg->socket < 0) {
@@ -1791,7 +1796,6 @@ static int wait_for_client (int *listen_sockets, int num_lsocks)
 {
   int i, ready, res, max_sock = 0;
   fd_set rfds;
-  struct timeval timeout;
 
   FD_ZERO(&rfds);
   for (i = 0; i < num_lsocks; i++) {
@@ -1799,10 +1803,8 @@ static int wait_for_client (int *listen_sockets, int num_lsocks)
     if (listen_sockets[i] > max_sock)
       max_sock = listen_sockets[i];
   }
-  timeout.tv_sec = 2;
-  timeout.tv_usec = 0;
 
-  if ((ready = select(max_sock + 1, &rfds, NULL, NULL, &timeout)) < 0) {
+  if ((ready = select(max_sock + 1, &rfds, NULL, NULL, NULL)) < 0) {
     if (errno == EINTR)
       return 0;
 
