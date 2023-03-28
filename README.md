@@ -24,40 +24,40 @@ If your terminal does not support colors and/or escape sequences, press *m* foll
 
 ```
 $ ./grapheqd -h
-grapheqd version 5
+grapheqd version 7
 PCM driver: OSS
 
 Usage:
-grapheqd [-a <address>] [-c <address>] [-d] [-e <program>] [-l <port>]
-         [-p <pid file>] [-r <port>] [-s <soundcard>] [-u <user>]
+grapheqd [-d] [-e <program>] [-l <address[:port]>] [-p <pidfile>]
+         [-r <address[:port]>] [-s <soundcard>] [-u <user>]
 grapheqd -h
 
-  -a <address>      listen on this address; default: 0.0.0.0
-  -c <address>      connect to another grapheqd running at this address on
-                    port 8083 by default (use -r to connect to a different
-                    port);
-                    cannot be used in conjunction with either option -e or -s
-  -d                run in foreground, and log to stdout/stderr, do not detach
-                    from terminal, do not log to syslog
-  -e <program>      read PCM data from this program's standard output; the
-                    name of the soundcard is passed as first commandline
-                    parameter to <program>; if the second commandline
-                    parameter is present and has a value of "stderr", i.e.
-                    if grapheqd has been started with -d, then <program> can
-                    write to standard error safely; otherwise, error logging
-                    must be done via syslog, e.g. by calling logger;
-                    cannot be used in conjunction with either option -c or -r
-  -l <port>         listen on this port; default: 8083
-  -p <pid file>     daemonize and save pid to this file; no default, pid gets
-                    not written to any file unless <pid file> is given
-  -r <port>         connect to a remote grapheqd on this port; requires
-                    parameter -c;
-                    cannot be used in conjunction with either option -e or -s
-  -s <soundcard>    read PCM from this soundcard; default: /dev/dsp0; cannot
-                    be used in conjunction with either option -c or -r; a
-                    program given via parameter -e takes precedence
-  -u <user>         switch to this user; no default, run as invoking user
-  -h                show this help ;-)
+  -d                     run in foreground, and log to stdout/stderr, do not
+                         detach from terminal, do not log to syslog
+  -e <program>           read PCM data from this program's standard output;
+                         the name of the soundcard is passed as first
+                         commandline parameter to <program>;
+                         if the second commandline parameter is present and
+                         has a value of "stderr", i.e. if grapheqd has been
+                         started with -d, then <program> can write to
+                         standard error safely;
+                         otherwise, error logging must be done via syslog,
+                         e.g. by calling logger;
+                         cannot be used in conjunction with either option -c
+                         or -r
+  -l <address[:port]>    listen on this address and port; a maximum of 16
+                         addresses may be specified; port defaults to 8083;
+                         default: 0.0.0.0:8083
+  -p <pidfile>           daemonize and save pid to this file; no default, pid
+                         gets not written to any file unless <pidfile> is given
+  -r <address[:port]>    connect to another grapheqd running at this address and
+                         port; <port> defaults to 8083; cannot be used in
+                         conjunction with either option -e or -s
+  -s <soundcard>         read PCM from this soundcard; default: /dev/dsp0;
+                         cannot be used in conjunction with option -r; a
+                         program given via parameter -e takes precedence
+  -u <user>              switch to this user; no default, run as invoking user
+  -h                     show this help ;-)
 
 ```
 
@@ -120,9 +120,8 @@ grapheqd -h
    grapheqd_profiles="scard remote"
    grapheqd_scard_soundcard="/dev/dsp1"
    grapheqd_scard_username="audiouser"
-   grapheqd_remote_port="8084"
-   grapheqd_remote_raddress="somehost"
-   grapheqd_remote_rport="8083"
+   grapheqd_remote_address="0.0.0.0:8084"
+   grapheqd_remote_raddress="somehost:8083"
    ```
 
    You can start each instance via `service grapheqd start scard` and `service grapheqd start remote`, respectively. If you omit the profile name, the RC script operates on every configured and enabled instance, e.g. `service grapheqd stop`.
