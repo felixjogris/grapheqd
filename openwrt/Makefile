@@ -1,13 +1,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=grapheqd
-PKG_VERSION:=7
+PKG_VERSION:=8
 PKG_RELEASE:=1
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/grapheqd-${PKG_VERSION}
-PKG_SOURCE:=grapheqd-7.tar.bz2
+PKG_SOURCE:=grapheqd-8.tar.bz2
 PKG_SOURCE_URL:=https://ogris.de/grapheqd/
-PKG_HASH:=a818f2157ccd6f6b9931192e8882e1fbf0bde833fe5e2f501d1bd41011682808
+PKG_HASH:=34ef4056fb07f5eed5bfc3cce0a56d2bffc4773e4147d7decc7a095fc440c371
 PKG_BUILD_DEPENDS:=alsa-lib openssl
 
 include $(INCLUDE_DIR)/package.mk
