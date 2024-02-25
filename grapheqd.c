@@ -30,13 +30,13 @@
 #  include <alsa/asoundlib.h>
 #  define DEFAULT_SOUNDCARD "hw:0"
 #endif
-#include <openssl/sha.h>
+#include <openssl/evp.h>
 #include "kiss_fft.h"
 #ifdef USE_SYSTEMD
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "7"
+#define GRAPHEQD_VERSION "8"
 
 #define MAX_CHANNELS 2   /* stereo */
 #define SAMPLING_WIDTH 2 /* 16 bit signed LE per channel per sample */
@@ -1517,24 +1517,31 @@ static void start_websocket(struct client_worker_arg *arg, char *url,
                                             "s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n"
                                   "Connection: Upgrade\r\n\r\n";
   char buf[sizeof(websocket_header)];
-  unsigned char sha_md[SHA_DIGEST_LENGTH];
-  SHA_CTX sha_ctx;
+  unsigned char sha_md[EVP_MAX_MD_SIZE];
+  EVP_MD_CTX *sha_ctx;
+  unsigned int sha_len;
   char *line_end = strchr(ws_key, '\r');
 
   if (!line_end)
     /* cant happen, has_header() checks for end of line as well */
     return;
-  if (!SHA1_Init(&sha_ctx))
+  if (!(sha_ctx = EVP_MD_CTX_new()))
     return;
-  if (!SHA1_Update(&sha_ctx, ws_key, line_end - ws_key))
+  if (!EVP_DigestInit_ex(sha_ctx, EVP_sha1(), NULL))
     return;
-  if (!SHA1_Update(&sha_ctx, ws_uuid, sizeof(ws_uuid) - 1))
+  if (!EVP_DigestUpdate(sha_ctx, ws_key, line_end - ws_key))
     return;
-  if (!SHA1_Final(sha_md, &sha_ctx))
+  if (!EVP_DigestUpdate(sha_ctx, ws_uuid, sizeof(ws_uuid) - 1))
+    return;
+  if (!EVP_DigestFinal_ex(sha_ctx, sha_md, &sha_len))
+    return;
+  EVP_MD_CTX_free(sha_ctx);
+
+  if (sha_len != 20)
     return;
 
   str2buf(buf, websocket_header, sizeof(websocket_header));
-  base64(buf + 42, sha_md, sizeof(sha_md));
+  base64(buf + 42, sha_md, sha_len);
 
   if (!send_http(arg, url, 101, 0, buf, sizeof(websocket_header) - 1))
     start_display(arg, display_func);
