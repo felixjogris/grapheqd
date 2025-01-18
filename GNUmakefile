@@ -32,7 +32,7 @@ favicon.h:	favicon.ico bin2c.pl
 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c: ;	git clone https://github.com/mborgerding/kissfft.git $(KISSFFT)
 
 install:	grapheqd grapheqd.service grapheqd.openrc ffmpeg2grapheqd.sh
-	install -d /usr/local/sbin
+	install -d /usr/local/sbin /usr/local/libexec
 	install grapheqd /usr/local/sbin/
 	install -m 0644 grapheqd.service /lib/systemd/system/ || install grapheqd.openrc /etc/init.d/grapheqd
 	install ffmpeg2grapheqd.sh /usr/local/libexec/

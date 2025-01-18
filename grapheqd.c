@@ -36,7 +36,7 @@
 #  include <systemd/sd-daemon.h>
 #endif
 
-#define GRAPHEQD_VERSION "8"
+#define GRAPHEQD_VERSION "9"
 
 #define MAX_CHANNELS 2   /* stereo */
 #define SAMPLING_WIDTH 2 /* 16 bit signed LE per channel per sample */
@@ -96,7 +96,7 @@ typedef struct {
 } peak;
 
 struct server {
-  char is_program;
+  signed char is_program;
   char *addr;
   char *port;
   int rfd;
@@ -1870,7 +1870,10 @@ static void show_help ()
 "\n"
 "  -d                     run in foreground, and log to stdout/stderr, do "
                                                                        "not\n"
-"                         detach from terminal, do not log to syslog\n"
+"                         detach from terminal, do not log to syslog, pass "
+                          "\"stderr\" as second parameter to any program "
+                                                                     "given\n"
+                          "via option -e\n"
 "  -e <program>           read PCM data from this program's standard "
                                                                    "output;\n"
 "                         the name of the soundcard is passed as first\n"
@@ -1883,9 +1886,7 @@ static void show_help ()
 "                         standard error safely;\n"
 "                         otherwise, error logging must be done via syslog,\n"
 "                         e.g. by calling logger;\n"
-"                         cannot be used in conjunction with either option "
-                                                                        "-c\n"
-"                         or -r\n"
+"                         cannot be used in conjunction with option -r\n"
 "  -l <address[:port]>    listen on this address and port; a maximum of "
                                                 STR(MAX_LISTEN_ADDRESSES) "\n"
 "                         addresses may be specified; port defaults to "
@@ -1904,7 +1905,11 @@ static void show_help ()
 DEFAULT_SOUNDCARD
 ";\n"
 "                         cannot be used in conjunction with option -r; a\n"
-"                         program given via parameter -e takes precedence\n" 
+"                         program given via parameter -e takes precedence, "
+                                                                       "but\n"
+"                         in turn is given the name of the soundcard as "
+                                                                     "first\n"
+                          "parameter\n"
 "  -u <user>              switch to this user; no default, run as invoking "
                                                                       "user\n"
 "  -h                     show this help ;-)\n"

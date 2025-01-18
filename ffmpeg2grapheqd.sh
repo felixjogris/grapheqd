@@ -1,6 +1,6 @@
 #!/bin/sh
 
-export PATH=/usr/local/bin:$PATH
+export PATH=/usr/local/sbin:/usr/local/bin:$PATH
 
 # grapheqd's raw "protocol" (little endian):
 # c -> s: 'r'
