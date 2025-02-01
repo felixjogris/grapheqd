@@ -13,15 +13,15 @@ endif
 
 .PHONY:	clean install package
 
-grapheqd:	grapheqd.o kiss_fft.o
-	$(CC) $(LDFLAGS) -o $@ grapheqd.o kiss_fft.o -lasound -lcrypto -lm \
-	-lpthread
+grapheqd:	grapheqd.o  $(KISSFFT)/libkissfft-float.a
+	$(CC) $(LDFLAGS) -o $@ grapheqd.o -L$(KISSFFT) -lasound -lcrypto \
+		-lm -lpthread -lkissfft-float
 
 grapheqd.o:	grapheqd.c rootpage.h favicon.h $(KISSFFT)/kiss_fft.h
 	$(CC) $(CFLAGS) -I$(KISSFFT) -c -o $@ grapheqd.c
 
-kiss_fft.o:	 $(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c
-	$(CC) $(CFLAGS) -I$(KISSFFT) -c -o $@ $(KISSFFT)/kiss_fft.c
+$(KISSFFT)/libkissfft-float.a:	$(KISSFFT)/kiss_fft.h
+	$(MAKE) -C$(KISSFFT) KISSFFT_TOOLS=0 KISSFFT_STATIC=1
 
 rootpage.h:	rootpage.html bin2c.pl
 	perl bin2c.pl rootpage.html "text/html; charset=utf8" rootpage
@@ -29,12 +29,14 @@ rootpage.h:	rootpage.html bin2c.pl
 favicon.h:	favicon.ico bin2c.pl
 	perl bin2c.pl favicon.ico "image/x-icon" favicon
 
-$(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c: ;	git clone https://github.com/mborgerding/kissfft.git $(KISSFFT)
+$(KISSFFT)/kiss_fft.h $(KISSFFT)/kiss_fft.c:
+	git clone https://github.com/mborgerding/kissfft.git $(KISSFFT)
 
 install:	grapheqd grapheqd.service grapheqd.openrc ffmpeg2grapheqd.sh
 	install -d /usr/local/sbin /usr/local/libexec
 	install grapheqd /usr/local/sbin/
-	install -m 0644 grapheqd.service /lib/systemd/system/ || install grapheqd.openrc /etc/init.d/grapheqd
+	install -m 0644 grapheqd.service /lib/systemd/system/ || \
+		install grapheqd.openrc /etc/init.d/grapheqd
 	install ffmpeg2grapheqd.sh /usr/local/libexec/
 
 package:	clean
