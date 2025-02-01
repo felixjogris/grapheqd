@@ -21,8 +21,8 @@ sendpcm () {
     exit
   fi
 
-  mixersettings=`mixer -s`
-  mixer =rec pcm2 >/dev/null
+  mixersettings=`mixer -o`
+  mixer pcm2.recsrc=set >/dev/null
 
   rate=""
   channels=""
